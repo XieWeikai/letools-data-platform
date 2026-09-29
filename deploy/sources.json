@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-09-29",
+  "letools": {"repository": "XieWeikai/letools", "commit": "44b71c999a12f7453e989e7536938a2e57d2a862", "directory": "../letools-tianji"},
+  "data_providers": {"repository": "XieWeikai/data-providers", "commit": "83a90d22e6944ce84e703f77a53c0c38ecb76a10", "directory": "../data-providers", "tianji_version": "0.4.0"},
+  "letools_visualizer": "dc59887796fd41f37040c0df6b10e6f6a30a1854",
+  "lerobot_doctor": "ff9475332cec755eb61a03b30273cc12dccddc28",
+  "runtime": {"python": "3.12.3", "bun": "1.4.2", "platform": "Linux aarch64"}
+}

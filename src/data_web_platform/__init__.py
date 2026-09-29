@@ -1,0 +1,3 @@
+"""A web interface around an explicitly configured, isolated LeTools runtime."""
+
+__version__ = "0.1.0"

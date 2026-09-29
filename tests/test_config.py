@@ -1,0 +1,27 @@
+import stat
+
+from data_web_platform.config import Config
+
+
+def test_initialize_repairs_existing_private_state_permissions(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o775)
+    for name in ("jobs", "config", "outputs", "exports"):
+        (state / name).mkdir(mode=0o775)
+        (state / name).chmod(0o775)
+    providers = state / "config/providers.toml"
+    providers.write_text("# preserve existing configuration\n[providers]\n")
+    providers.chmod(0o664)
+    unrelated = tmp_path / "source-dataset"
+    unrelated.mkdir(mode=0o755)
+    unrelated.chmod(0o755)
+
+    config = Config(project_root=tmp_path, state_dir=state)
+    config.initialize()
+
+    for path in [state, *(state / name for name in ("jobs", "config", "outputs", "exports"))]:
+        assert stat.S_IMODE(path.stat().st_mode) == 0o700
+    for path in [providers, state / "access-token", state / "internal-token"]:
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert providers.read_text() == "# preserve existing configuration\n[providers]\n"
+    assert stat.S_IMODE(unrelated.stat().st_mode) == 0o755

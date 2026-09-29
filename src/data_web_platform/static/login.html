@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>安全登录 · Data Web Platform</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body data-page="login" class="login-page">
+  <main class="login-shell">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">D</span><span>Data Web <strong>Platform</strong><small>机器人数据工作台</small></span></a>
+    <section class="login-card" aria-labelledby="login-title">
+      <p class="eyebrow">安全访问 / SECURE ACCESS</p>
+      <h1 id="login-title">连接数据工作台</h1>
+      <p class="subtitle">输入此服务器的访问令牌。令牌由服务管理员提供。</p>
+      <form id="login-form" novalidate>
+        <div class="field"><label for="access-token">访问令牌</label><input id="access-token" name="token" type="password" autocomplete="current-password" required autofocus aria-describedby="login-error token-help"><p id="token-help" class="field-help">可以粘贴完整令牌；令牌不会保存到浏览器本地存储。</p><p id="login-error" class="field-error" role="alert" hidden></p></div>
+        <button type="submit" id="login-submit" class="button primary">安全登录 <span aria-hidden="true">→</span></button>
+      </form>
+      <p class="login-footnote">登录后使用受保护的会话 Cookie。请勿将访问令牌分享给不可信的人。</p>
+    </section>
+    <p class="login-bottom">检查 · 对齐 · 转换 · 诊断</p>
+  </main>
+</body>
+</html>

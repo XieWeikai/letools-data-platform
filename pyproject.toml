@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "data-web-platform"
+version = "0.1.0"
+description = "Isolated LeTools dataset operations and Tianji conversion workbench"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.110,<1", "uvicorn>=0.27,<1", "httpx>=0.28,<1", "pydantic>=2.5,<3"]
+
+[project.scripts]
+data-web-platform = "data_web_platform.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/data_web_platform"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
