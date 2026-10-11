@@ -1,3 +1,9 @@
+"""Resolve the private runtime and construct child-process environments.
+
+Configuration is per service/venv. It must not inherit arbitrary source-module
+overrides from an operator's shell or replace the user's global provider file.
+The internal token is solely for the loopback Viewer bridge, not browser login.
+"""
 from __future__ import annotations
 
 import os
@@ -8,6 +14,7 @@ from pathlib import Path
 
 @dataclass
 class Config:
+    """Paths and service settings; construction alone does not create state."""
     project_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[2])
     letools_root: Path = field(default_factory=lambda: Path.home() / "projects/letools-tianji")
     state_dir: Path | None = None
@@ -44,6 +51,11 @@ class Config:
         return obj
 
     def initialize(self):
+        """Create only owned state/config files and restrict their permissions.
+
+        Existing provider settings and the bridge token are reused. Permission
+        repair is restricted to managed state directories, never source data.
+        """
         self.state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         # mkdir(mode=...) and the service umask do not repair directories that
         # were created by a deployment tool before the first service start.
@@ -68,6 +80,12 @@ class Config:
             self.internal_token = path.read_text().strip()
 
     def environment(self):
+        """Build a fresh subprocess environment with private plugin discovery.
+
+        Removing PYTHONPATH and LEtools module overrides prevents the service
+        from accidentally importing a different checkout than its interpreter.
+        These changes apply only to this child, not the shell or global config.
+        """
         env = dict(os.environ)
         env.pop("PYTHONPATH", None)
         env.pop("LETOOLS_PROVIDER_MODULES", None)

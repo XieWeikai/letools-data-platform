@@ -155,6 +155,12 @@ class _ProcessGroup:
 
 
 class JobManager:
+    """Persist one queue and serialize all conversion/Doctor/editor processes.
+
+    On restart, unfinished records become interrupted instead of being retried
+    against potentially changed inputs. Each worker gets its own process group;
+    cancellation and shutdown use the same owner to avoid signalling reused PIDs.
+    """
     def __init__(self, config, registry=None):
         self.config, self.registry = config, registry
         self.root = config.state_dir / "jobs"
@@ -209,6 +215,7 @@ class JobManager:
         return max(0, time.monotonic() - started) if started is not None else 0
 
     def _submit(self, request, module):
+        """Save an immutable request before enqueueing and reject output races."""
         with self.lock:
             output = request.get("destination") or request.get("output")
             if output:
@@ -266,6 +273,11 @@ class JobManager:
             return self.get(job_id)
 
     def _event(self, item, event):
+        """Reduce structured worker events into the persistent UI projection.
+
+        Stage/check counters come from actual events. Logs are separate text;
+        a progress display is never a substitute for a successful worker result.
+        """
         kind = event.get("event")
         if kind == "stage":
             name = event["name"]
@@ -311,6 +323,12 @@ class JobManager:
                 self.pending.task_done()
 
     def _run(self, job_id):
+        """Drain worker output, reap the owned group, then settle/register result.
+
+        Spawning with an argv list avoids shell interpretation of dataset text.
+        Source and output options were validated before this point and are
+        rechecked by workers; user input cannot choose a module to execute.
+        """
         directory = self.root / job_id
         group = None
         complete = False

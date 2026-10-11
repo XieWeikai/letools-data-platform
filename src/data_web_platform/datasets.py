@@ -110,6 +110,11 @@ class DatasetRegistry:
         return payload
 
     def register(self, path: str | Path) -> dict:
+        """Validate a physical dataset and assign a stable local URL identity.
+
+        Registration stores a reference and metadata; it neither copies the
+        dataset nor uploads it. Identity derives from the canonical server path.
+        """
         root, info = inspect_dataset(path, self.config.allowed_roots)
         slug = re.sub(r"[^a-z0-9_-]+", "-", root.name.lower()).strip("-")[:60] or "dataset"
         identity = f"{slug}-{hashlib.sha256(str(root).encode()).hexdigest()[:12]}"

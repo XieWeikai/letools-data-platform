@@ -27,6 +27,13 @@ def fingerprint(roots):
 
 
 def run(request_file):
+    """Execute strict raw conversion or an independent read-only check.
+
+    Keep one TianjiConfig for all stages. The combined provider call may write
+    intermediate videos while checking, but any selected anomaly prevents a
+    completed cache and the entire conversion. Only a deep-validated new target
+    is published; the user never implicitly opts into valid-only selection.
+    """
     request = json.loads(Path(request_file).read_text())
     job_dir = Path(request_file).parent
     os.nice(10)

@@ -1,3 +1,10 @@
+"""HTTP orchestration for a configured LeTools environment.
+
+The API resolves server paths and typed requests, then hands expensive work to
+JobManager. Source parsing/alignment belongs to the provider; LeRobot layout
+writing belongs to LeTools. Browser reachability is the access boundary in this
+trusted-network deployment, while same-origin write and path checks remain.
+"""
 from __future__ import annotations
 
 import json
@@ -23,6 +30,11 @@ from .viewer import ViewerService, create_viewer_router
 
 
 def discover_providers(config):
+    """Discover through the worker interpreter, then mark implemented UI flows.
+
+    Installing an entry point makes it visible, but does not create a recording
+    picker, form schema or worker adapter for that source family automatically.
+    """
     result = subprocess.run(
         [str(config.python), "-m", "letools.cli", "providers", "list"],
         env=config.environment(), capture_output=True, text=True, timeout=25, check=True)
@@ -35,6 +47,12 @@ def discover_providers(config):
 
 
 def list_recordings(path, config):
+    """List direct recording candidates, including recognizable broken bags.
+
+    This is discovery, not validation. Omitting a missing metadata file here
+    would hide bad recordings before the user can see their diagnostic report.
+    Prepared caches and final LeRobot datasets use separate workflows.
+    """
     root = validate_path(path, config.allowed_roots)
     if not root.is_dir():
         raise ValueError("原始数据集必须是目录")
@@ -61,6 +79,11 @@ def list_recordings(path, config):
 
 
 def prepare_job(payload: JobRequest, config, providers):
+    """Bind a request to the current listing and reserve only new output paths.
+
+    Canonicalize and deduplicate selections before queueing. The worker repeats
+    source-stability checks later because time can pass between these two steps.
+    """
     available = {p["name"] for p in providers if p["web_supported"]}
     if payload.provider not in available:
         raise ValueError("该 provider 没有安装在配置的 LeTools 环境中，或没有对应的 Web 参数适配器")
@@ -89,6 +112,7 @@ class DatasetPath(BaseModel):
 
 
 def create_app(config=None, *, start_services=True):
+    """Own the queue and Viewer lifecycles; tests can suppress both services."""
     config = config or Config.from_env()
     config.initialize()
     registry = DatasetRegistry(config)
