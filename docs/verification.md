@@ -49,6 +49,14 @@ WARN包含常值夹爪/动作维度、无聚合`stats.json`等原生诊断。v2.
 
 独立结果保存在验收目录的`fixtures.json`、`doctor-real-validation.json`、`editor-annotation-validation.json`及各job报告中。未经授权没有测试真实Hub上传或控制机器人。
 
+## 常驻生产服务回归
+
+同日将已推送的发布版本快进部署到Marvin生产checkout，专用venv中的平台安装元数据从0.1.0更新为0.2.0。保留原部署修改的Git stash与旧Viewer缓存；没有重写历史、删除源数据或替换全局工具。原`~/.local/bin/letools`和`~/.config/letools/providers.toml`的SHA-256在部署前后相同。
+
+实际`data-web-platform.service`继续监听8095，API/Editor/Viewer就绪，源码工作树干净。重新通过常驻队列完成两条原始数据检查与v2.1转换（2条/1,419帧）；混入已知异常后整批拒绝，没有发布目标。证据在验收目录的`production-acceptance/verified.json`及其job记录。
+
+通过SSH转发实际8095页面再次确认无需登录、provider0.6.2、四路960×540视频readyState=4且无媒体错误，Viewer Doctor iframe指向同源`/doctor/?dataset=...`。该回归覆盖重启后的常驻服务，不只是在新进程里调用函数。
+
 ## 性能与适用范围
 
 Provider0.6.2的完整125条严格检查、转换114条通过项为269.509秒；对照0.6.1为572.020秒。该验收使用CLI/API显式valid-only选择策略，网页仍是全部选中项必须通过。视频体积约3.88倍、采样峰值RSS约8.13GB；未采用CUVID硬解。详见[第二阶段实验](https://github.com/XieWeikai/data-providers/blob/main/tianji_provider/docs/PERFORMANCE_ROUND2.md)。
