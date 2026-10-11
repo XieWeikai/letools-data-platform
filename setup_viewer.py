@@ -7,6 +7,7 @@ The original LeTools source and its user-wide visualizer cache are read-only.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -16,6 +17,49 @@ import subprocess
 import tempfile
 
 from data_web_platform.config import Config
+
+
+@contextmanager
+def private_git_context(state_dir: Path):
+    """Keep git apply inside the generated cache, even below a Git checkout.
+
+    Git otherwise discovers the platform's parent repository and can silently
+    skip every patch path while returning success. Setup is a standalone CLI,
+    not a threaded server operation; restore the caller's Git environment even
+    when preparing the cache fails. Neither upstream checkout is modified.
+    """
+    names = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+             "GIT_PREFIX", "GIT_CEILING_DIRECTORIES")
+    previous = {name: os.environ.pop(name, None) for name in names}
+    os.environ["GIT_CEILING_DIRECTORIES"] = str(state_dir.resolve())
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def prepare_upstream(config):
+    """Verify the Doctor hook, repairing older falsely marked private caches."""
+    from letools.visualizer import prepare_visualizer
+
+    def patched(installation):
+        file = installation.source / "src/app/[org]/[dataset]/[episode]/episode-viewer.tsx"
+        source = file.read_text()
+        return all(anchor in source for anchor in (
+            "process.env.NEXT_PUBLIC_LEROBOT_DOCTOR_URL", "href={doctorUrl}", "src={doctorUrl}"))
+
+    with private_git_context(config.state_dir):
+        options = {"cache_dir": config.state_dir / "viewer-upstream", "install_dependencies": False}
+        upstream = prepare_visualizer(**options)
+        if not patched(upstream):
+            upstream = prepare_visualizer(**options, force=True)
+        if not patched(upstream):
+            raise RuntimeError("Pinned viewer is missing the configurable local Doctor integration")
+        return upstream
 
 
 def _replace(path: Path, old: str, new: str, count: int = 1):
@@ -112,8 +156,7 @@ def apply_overlay(source: Path, overlay: Path):
 
 
 def prepare(config, *, install: bool = True, build: bool = True, force: bool = False) -> Path:
-    from letools.visualizer import prepare_visualizer
-    upstream = prepare_visualizer(cache_dir=config.state_dir / "viewer-upstream", install_dependencies=False)
+    upstream = prepare_upstream(config)
     overlay = config.project_root / "viewer_overlay"
     digest = hashlib.sha256(upstream.fingerprint.encode())
     digest.update(Path(__file__).read_bytes())
