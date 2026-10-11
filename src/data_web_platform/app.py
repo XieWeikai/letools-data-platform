@@ -157,6 +157,10 @@ def create_app(config=None, *, start_services=True):
         response.headers["Referrer-Policy"] = "same-origin"
         if path in {"/", "/login"} or (path.startswith("/api/") and not path.startswith("/api/proxy")):
             response.headers["Cache-Control"] = "no-store"
+        elif path.startswith("/static/"):
+            # StaticFiles supplies ETag/Last-Modified. Revalidate on a new page
+            # load so an update cannot pair current worker events with stale UI.
+            response.headers["Cache-Control"] = "no-cache"
         return response
 
     @app.exception_handler(ValueError)
