@@ -3,6 +3,17 @@ import stat
 from data_web_platform.config import Config
 
 
+def test_explicit_runtime_paths_override_derived_defaults(monkeypatch, tmp_path):
+    monkeypatch.setenv("DWP_PROJECT_ROOT", str(tmp_path / "checkout"))
+    monkeypatch.setenv("DWP_LETOOLS_ROOT", str(tmp_path / "core"))
+    monkeypatch.setenv("DWP_STATE_DIR", str(tmp_path / "separate-state"))
+    monkeypatch.setenv("DWP_PYTHON", str(tmp_path / "private-venv/bin/python"))
+    config = Config.from_env()
+    assert config.project_root == tmp_path / "checkout"
+    assert config.state_dir == tmp_path / "separate-state"
+    assert config.python == tmp_path / "private-venv/bin/python"
+
+
 def test_initialize_repairs_existing_private_state_permissions(tmp_path):
     state = tmp_path / "state"
     state.mkdir(mode=0o775)

@@ -82,7 +82,7 @@ class Config:
     def environment(self):
         """Build a fresh subprocess environment with private plugin discovery.
 
-        Removing PYTHONPATH and LEtools module overrides prevents the service
+        Removing PYTHONPATH and LeTools module overrides prevents the service
         from accidentally importing a different checkout than its interpreter.
         These changes apply only to this child, not the shell or global config.
         """

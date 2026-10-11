@@ -39,4 +39,11 @@ systemctl --user status data-web-platform.service
 Real smoke scripts write only new outputs under `.state`. Check active jobs before
 restarting the service. See README for live API/browser test prerequisites.
 
-New repository: no historical Git workflow to infer. Use descriptive commits.
+Group commits by behavior: access model, Editor integration, worker/UI fixes,
+deployment, then documentation/evidence. Preserve unrelated staged work; do not
+rewrite published history or fold generated state into a source commit.
+
+Current conversion uses provider check_and_prepare (strict all-selected policy),
+then convert/validate/publish. Keep legacy independent-check behavior and old job
+history readable. User docs live in docs/usage.md; deployment/API/architecture
+changes must update their corresponding guides and deploy/sources.json.

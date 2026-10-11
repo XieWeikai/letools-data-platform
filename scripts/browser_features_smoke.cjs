@@ -136,11 +136,14 @@ async function verifyTab(page,tab,dataset,entry,out) {
       result.check={id:submitted.id,initialStatus:submitted.status,reused:true};
       await page.locator('.job-item').filter({hasText:resumeCheck.slice(0,12)}).click();
     } else {
-    await page.locator('#source-root').fill('/media/user/BAG_STORAGE/recorded_bags');
+    const sourceRoot = process.env.DWP_TEST_SOURCE;
+    assert(sourceRoot, 'Set DWP_TEST_SOURCE to the server parent containing the known-bad recording');
+    await page.locator('#source-root').fill(sourceRoot);
     await page.locator('#load-recordings').click();
     await page.locator('#recordings input[type=checkbox]').first().waitFor();
     if(await page.locator('#select-none').isEnabled())await page.locator('#select-none').click();
-    const recording='my_bag-26-09-16-15-56-37-27f8ef7d';
+    const recording=process.env.DWP_TEST_NEGATIVE_RECORDING;
+    assert(recording, 'Set DWP_TEST_NEGATIVE_RECORDING to the known-bad recording name');
     await page.getByRole('checkbox',{name:'选择 '+recording,exact:true}).check();
     assert.equal(await page.locator('#recordings input[type=checkbox]:checked').count(),1);
     const responsePromise=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/jobs' && response.request().method()==='POST');
@@ -166,7 +169,7 @@ async function verifyTab(page,tab,dataset,entry,out) {
     assert.equal(result.check.job.kind,'check');
     assert.equal(result.check.job.check_results.length,1);
     assert.equal(result.check.job.check_results[0].valid,false);
-    assert.match(result.check.text,/my_bag-26-09-16-15-56-37-27f8ef7d/,'expanded UI result must identify the selected bad recording');
+    assert(result.check.text.includes(recording),'expanded UI result must identify the selected bad recording');
     assert.match(result.check.text,/异常|缺口|gap/i,'expanded UI must expose the anomaly, not only a failed status');
     await page.screenshot({path:path.join(out,'anomaly-check-result.png'),fullPage:true});
     console.log(JSON.stringify({check:result.check}));

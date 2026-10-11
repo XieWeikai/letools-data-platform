@@ -125,7 +125,7 @@ annotated_rows = sum(marker in json.dumps(value) for table in tables for value i
 assert frame_rows == info["total_frames"] and annotated_rows > 0
 print(json.dumps({"path": str(p), "version": info["codebase_version"], "dataFiles": len(data), "videoFiles": len(videos), "frameRows": frame_rows, "annotatedRows": annotated_rows, "annotationPresent": True}))`;
       const environment = await jsonRequest('get','/api/environment');
-      const disk = JSON.parse(execFileSync('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=12','marvin',
+      const disk = JSON.parse(execFileSync('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=12',process.env.DWP_TEST_SSH_HOST || 'marvin-tailscale',
         `${quoteShell(environment.python)} -c ${quoteShell(verifyExport)} ${quoteShell(exported.output_dir)} ${quoteShell(marker)}`],{encoding:'utf8',timeout:30000}));
       const collision = await context.request.post(origin+'/api/export',{data:{...ref,output_dir:exported.output_dir,copy_videos:false}});
       assert.equal(collision.status(),409,'export must reject an existing destination');
@@ -156,7 +156,9 @@ print(json.dumps({"path": str(p), "version": info["codebase_version"], "dataFile
     await page.locator('#folder-dialog').waitFor({state:'visible'});
     await page.keyboard.press('Escape');
     await page.locator('#folder-dialog').waitFor({state:'hidden'});
-    await page.locator('#source-root').fill('/media/user/BAG_STORAGE/recorded_bags');
+    const sourceRoot = process.env.DWP_TEST_SOURCE;
+    assert(sourceRoot, 'Set DWP_TEST_SOURCE to a server recording directory');
+    await page.locator('#source-root').fill(sourceRoot);
     await page.locator('#load-recordings').click();
     await page.locator('#recordings input[type=checkbox]').first().waitFor();
     await page.locator('#select-all').click();

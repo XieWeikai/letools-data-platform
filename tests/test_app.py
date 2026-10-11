@@ -116,6 +116,10 @@ def test_incomplete_recordings_are_not_silently_filtered(client, config):
 
 
 def test_config_override_derives_paths(monkeypatch, tmp_path):
+    # This case tests derived defaults, not explicit overrides inherited from a
+    # developer's isolated DWP_STATE_DIR / DWP_PYTHON shell configuration.
+    monkeypatch.delenv("DWP_STATE_DIR", raising=False)
+    monkeypatch.delenv("DWP_PYTHON", raising=False)
     monkeypatch.setenv("DWP_PROJECT_ROOT", str(tmp_path / "platform"))
     monkeypatch.setenv("DWP_LETOOLS_ROOT", str(tmp_path / "letools"))
     c = Config.from_env()
