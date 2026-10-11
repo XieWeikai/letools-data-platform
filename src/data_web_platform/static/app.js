@@ -60,7 +60,7 @@
 
   const STORAGE_KEY = "data-web-platform.preferences.v1";
   const preferenceIds = ["provider", "source-root", "destination", "task", "fps", "target-version", "max-gap-ms", "command-max-age-ms", "gripper-max-gap-ms", "state-resampling", "trim-stationary", "motion-joint-threshold-rad", "motion-gripper-threshold", "workers", "video-workers"];
-  const STATUS = { queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消" };
+  const STATUS = { queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" };
   const STAGE = { queued: "等待执行", preflight: "检查输入", editor_plan: "编辑计划", editor_apply: "数据集编辑", publish: "发布输出", check: "检查数据", check_prepare: "检查与准备", prepare: "对齐与准备", convert: "生成数据集", validate: "验证输出", doctor: "Doctor 诊断", score: "质量评分", gate: "训练准入", fix: "修复副本", trim: "裁剪副本", "merge-check": "合并预检" };
   const ACTIVE = new Set(["queued", "running"]);
   const state = {
@@ -479,7 +479,14 @@
     const description = [dateTime(job.created_at), `耗时 ${duration(job.elapsed_seconds)}`];
     if (params) description.push(`${params.fps} FPS`, job.request.target_version ?? "v2.1");
     put("job-meta", description.join(" · "));
-    const stageNames = job.kind === "convert" ? ["check", "prepare", "convert", "validate"] : ["doctor", "editor"].includes(job.kind) ? (job.stages?.map((stage) => stage.name).filter((name, index, items) => items.indexOf(name) === index) ?? []) : ["check"];
+    // Current conversions fuse check and preparation. Keep legacy history
+    // readable, but never invent two pending stages for an already completed
+    // check_prepare event. Queued jobs use the current four-stage workflow.
+    const observedStages = [...new Set((job.stages ?? []).map((stage) => stage.name))];
+    const conversionStages = !observedStages.length || observedStages.includes("check_prepare")
+      ? ["check_prepare", "convert", "validate", "publish"]
+      : ["check", "prepare", "convert", "validate", ...observedStages.includes("publish") ? ["publish"] : []];
+    const stageNames = job.kind === "convert" ? conversionStages : ["doctor", "editor"].includes(job.kind) ? observedStages : ["check"];
     if (!stageNames.length) stageNames.push(job.request?.operation ?? "doctor");
     byId("job-stages").classList.toggle("single-stage", stageNames.length === 1);
     replace(byId("job-stages"), stageNames.map((name, index) => {
