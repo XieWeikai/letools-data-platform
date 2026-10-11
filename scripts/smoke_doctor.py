@@ -1,4 +1,4 @@
-"""Isolated authenticated Doctor API acceptance with real worker subprocesses.
+"""Isolated cookie-free Doctor API acceptance with real worker subprocesses.
 
 Example (no port binding, main-service restart, Hub writes, or source mutation):
     .venv/bin/python scripts/smoke_doctor.py --summary .state/verification-*/summary.json
@@ -137,11 +137,10 @@ def run(args):
 
     try:
         with TestClient(app) as client:
-            assert client.get("/api/doctor/options").status_code == 401
-            response = client.post("/api/session", json={"token": config.auth_token})
-            assert response.status_code == 200, "Isolated API authentication failed"
+            assert not client.cookies, "Doctor smoke must start without session cookies"
             options = client.get("/api/doctor/options")
             options.raise_for_status()
+            assert "set-cookie" not in options.headers, "Doctor must not create a login session"
             assert set(options.json()["operations"]) == set(OPERATIONS)
             assert options.json()["checks"] == list(CHECKS) and len(CHECKS) == 12
             assert options.json()["fixes"] == list(FIXES)
@@ -233,7 +232,7 @@ def run(args):
                     "confirm": True, "output": str(sources[version] / "unsafe-output")}).status_code == 400
                 assert client.post("/api/doctor/jobs", json={"operation": "trim", "dataset": identity,
                     "confirm": False, "output": str(evidence / "unconfirmed")}).status_code == 422
-            result["safety"]["authentication"] = True
+            result["safety"]["cookie_free_access"] = True
             if not args.readonly_only:
                 perform("merge-check-v21-v30", {"operation": "merge-check",
                     "datasets": [r["repo_id"] for r in records.values()]}, quality_failure_allowed=True)

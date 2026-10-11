@@ -2,7 +2,7 @@
 
 Only the platform's private cache contains frontend adaptations.  The source
 checkout is never modified.  SSR reads use a token-protected loopback bridge;
-browser reads use the platform session and never receive the internal token.
+browser reads use same-origin routes and never receive the internal token.
 """
 from __future__ import annotations
 
@@ -236,7 +236,7 @@ class DataBridge:
                 try:
                     path = dataset_file(owner.config, owner.registry,
                                         f"{match[1]}/{match[2]}", match[3])
-                    # Keep SSR's metadata identical to the authenticated
+                    # Keep SSR's metadata identical to the same-origin
                     # browser route; the optional-files manifest is virtual.
                     body = (json.dumps(viewer_dataset_info(owner.config, owner.registry,
                                                           f"{match[1]}/{match[2]}"),
@@ -668,7 +668,7 @@ class AnnotationStore:
 
 
 def create_viewer_router(config, registry, *, service: ViewerService | None = None) -> APIRouter:
-    """Mount this router once, under the platform's normal authentication."""
+    """Mount this router once, under the platform's same-origin request checks."""
     router = APIRouter()
     viewer = service or ViewerService(config, registry)
     store = AnnotationStore(config, registry)

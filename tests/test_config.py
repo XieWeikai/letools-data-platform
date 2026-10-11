@@ -21,7 +21,12 @@ def test_initialize_repairs_existing_private_state_permissions(tmp_path):
 
     for path in [state, *(state / name for name in ("jobs", "config", "outputs", "exports"))]:
         assert stat.S_IMODE(path.stat().st_mode) == 0o700
-    for path in [providers, state / "access-token", state / "internal-token"]:
+    for path in [providers, state / "internal-token"]:
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert not (state / "access-token").exists()
+    assert config.internal_token
+    token = config.internal_token
+    config.initialize()
+    assert config.internal_token == token
     assert providers.read_text() == "# preserve existing configuration\n[providers]\n"
     assert stat.S_IMODE(unrelated.stat().st_mode) == 0o755

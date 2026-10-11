@@ -1,7 +1,7 @@
-"""Authenticated live API check + real v2.1/v3.0 conversions (new outputs only).
+"""Cookie-free live API check + real v2.1/v3.0 conversions (new outputs only).
 
 Run on the server after starting the service. Does not touch original metadata,
-does not log access credentials, and writes all evidence under private state.
+does not require login credentials, and writes all evidence under private state.
 """
 from __future__ import annotations
 import argparse
@@ -25,10 +25,10 @@ def main():
     test = state / ("verification-" + time.strftime("%Y%m%d-%H%M%S"))
     test.mkdir(parents=True)
     client = httpx.Client(base_url=args.origin, timeout=60)
-    response = client.post("/api/session", json={"token": (state / "access-token").read_text().strip()})
-    response.raise_for_status()
+    assert not client.cookies, "API smoke must start without session cookies"
     environment = client.get("/api/environment")
     environment.raise_for_status()
+    assert "set-cookie" not in environment.headers, "Public API must not create a login session"
     (test / "environment.json").write_text(json.dumps(environment.json(), indent=2))
     results = {}
 

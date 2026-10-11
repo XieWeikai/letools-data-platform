@@ -39,7 +39,7 @@
     }).join("；");
     return typeof detail === "string" ? detail : fallback;
   };
-  async function api(path, { method = "GET", body, noRedirect = false } = {}) {
+  async function api(path, { method = "GET", body } = {}) {
     let response;
     try {
       response = await fetch(path, {
@@ -53,54 +53,10 @@
     const text = await response.text();
     let payload = null;
     try { payload = text ? JSON.parse(text) : null; } catch { /* Non-JSON errors use a safe generic message. */ }
-    if (response.status === 401 && !noRedirect) {
-      window.location.assign("/login");
-      throw new ApiError("登录已过期，请重新登录。", 401);
-    }
     if (!response.ok) throw new ApiError(errorMessage(payload, `请求失败（HTTP ${response.status}），请稍后重试。`), response.status);
     if (text && payload === null) throw new ApiError("服务器返回了无法识别的响应。", response.status);
     return payload;
   }
-
-  async function initLogin() {
-    const form = byId("login-form");
-    const error = byId("login-error");
-    const button = byId("login-submit");
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      if (button.disabled) return;
-      const token = byId("access-token").value;
-      show(error, false);
-      byId("access-token").removeAttribute("aria-invalid");
-      if (!token.trim()) {
-        error.textContent = "请填写访问口令。";
-        show(error, true);
-        byId("access-token").setAttribute("aria-invalid", "true");
-        byId("access-token").focus();
-        return;
-      }
-      button.disabled = true;
-      button.textContent = "正在验证…";
-      try {
-        await api("/api/session", { method: "POST", body: { token }, noRedirect: true });
-        byId("access-token").value = "";
-        window.location.replace("/");
-      } catch (failure) {
-        error.textContent = failure.message;
-        show(error, true);
-        byId("access-token").setAttribute("aria-invalid", "true");
-        byId("access-token").focus();
-        button.disabled = false;
-        button.textContent = "进入工作台";
-      }
-    });
-    try {
-      const session = await api("/api/session", { noRedirect: true });
-      if (session?.authenticated) window.location.replace("/");
-    } catch { /* The sign-in form stays usable when the initial status request fails. */ }
-  }
-
-  if (document.body.dataset.page === "login") { initLogin(); return; }
 
   const STORAGE_KEY = "data-web-platform.preferences.v1";
   const preferenceIds = ["provider", "source-root", "destination", "task", "fps", "target-version", "max-gap-ms", "command-max-age-ms", "gripper-max-gap-ms", "state-resampling", "trim-stationary", "motion-joint-threshold-rad", "motion-gripper-threshold", "workers", "video-workers"];

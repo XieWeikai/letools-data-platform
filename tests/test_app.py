@@ -1,11 +1,9 @@
-import time
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from data_web_platform.app import create_app, prepare_job, session_value, valid_session
+from data_web_platform.app import create_app, prepare_job
 from data_web_platform.config import Config
 from data_web_platform.models import AlignmentParams, JobRequest
 
@@ -13,8 +11,7 @@ from data_web_platform.models import AlignmentParams, JobRequest
 @pytest.fixture
 def config(tmp_path):
     return Config(project_root=tmp_path, state_dir=tmp_path / "state",
-                  letools_root=tmp_path / "letools", allowed_roots=[tmp_path],
-                  auth_token="test-secret-not-for-production")
+                  letools_root=tmp_path / "letools", allowed_roots=[tmp_path])
 
 
 @pytest.fixture
@@ -25,24 +22,41 @@ def client(config):
             yield test
 
 
-def test_auth_and_cross_site(client):
-    assert client.get("/api/environment").status_code == 401
-    assert client.post("/api/session", json={"token": "incorrect"}).status_code == 401
-    response = client.post("/api/session", json={"token": "test-secret-not-for-production"})
+def test_direct_access_without_login(client):
+    assert not client.cookies
+    response = client.get("/")
     assert response.status_code == 200
-    assert "HttpOnly" in response.headers["set-cookie"]
+    assert "数据处理工作台" in response.text
+    assert "set-cookie" not in response.headers
+    assert response.headers["cache-control"] == "no-store"
     assert client.get("/api/environment").json()["providers"][0]["name"] == "tianji"
-    assert client.post("/api/jobs", json={}, headers={"origin": "https://evil.example"}).status_code == 403
-    assert client.delete("/api/session").status_code == 200
-    assert not client.get("/api/session").json()["authenticated"]
+    assert client.get("/api/datasets").status_code == 200
+    assert client.get("/api/jobs").status_code == 200
+    assert client.get("/doctor").status_code == 200
+    assert not client.cookies
 
 
-def test_cookie_signature_expiry():
-    assert valid_session("x", session_value("x"))
-    assert not valid_session("x", session_value("y"))
-    assert not valid_session("x", session_value("x", int(time.time()) - 10))
-    assert not valid_session("x", "garbage")
-    assert not valid_session("x", None)
+def test_old_login_url_redirects_to_dashboard(client):
+    response = client.get("/login", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert client.get("/login").status_code == 200
+    assert client.get("/static/login.html").status_code == 404
+    assert client.post("/api/session", json={"token": "obsolete"}).status_code == 404
+
+
+def test_cross_site_write_protection_without_login(client):
+    for origin in ("https://evil.example", "null", "https://testserver"):
+        assert client.post("/api/jobs", json={}, headers={"origin": origin}).status_code == 403
+    # A same-origin request reaches normal payload validation, not a login gate.
+    assert client.post("/api/jobs", json={}, headers={"origin": "http://testserver"}).status_code == 422
+
+
+def test_old_cookie_cannot_restore_login_requirement(client):
+    client.cookies.set("dwp_session", "expired-or-invalid")
+    assert client.get("/").status_code == 200
+    assert client.get("/api/environment").status_code == 200
+    assert client.get("/doctor").status_code == 200
 
 
 def recording(path):
@@ -52,7 +66,6 @@ def recording(path):
 
 
 def test_select_and_new_outputs(client, config):
-    client.post("/api/session", json={"token": config.auth_token})
     root = config.project_root / "raw"
     one = recording(root / "one")
     two = recording(root / "two")
@@ -86,7 +99,6 @@ def test_params_reject_unsupported_and_nonfinite():
 
 
 def test_incomplete_recordings_are_not_silently_filtered(client, config):
-    client.post("/api/session", json={"token": config.auth_token})
     root = config.project_root / "raw"
     root.mkdir()
     empty = root / "my_bag-broken"

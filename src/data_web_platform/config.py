@@ -18,7 +18,6 @@ class Config:
     host: str = "0.0.0.0"
     port: int = 8095
     default_source: str = "/media/user/BAG_STORAGE/recorded_bags"
-    auth_token: str = ""
     internal_token: str = ""
 
     def __post_init__(self):
@@ -58,15 +57,15 @@ class Config:
         if not provider_file.exists():
             provider_file.write_text("# This file is private to Data Web Platform.\n[providers]\n")
         provider_file.chmod(0o600)
-        for attr, filename in (("auth_token", "access-token"), ("internal_token", "internal-token")):
-            path = self.state_dir / filename
-            if not path.exists():
-                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                with os.fdopen(fd, "w") as stream:
-                    stream.write(secrets.token_urlsafe(32) + "\n")
-            path.chmod(0o600)
-            if not getattr(self, attr):
-                setattr(self, attr, path.read_text().strip())
+        # Only the loopback bridge needs a secret. Browser access has no login.
+        path = self.state_dir / "internal-token"
+        if not path.exists():
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as stream:
+                stream.write(secrets.token_urlsafe(32) + "\n")
+        path.chmod(0o600)
+        if not self.internal_token:
+            self.internal_token = path.read_text().strip()
 
     def environment(self):
         env = dict(os.environ)

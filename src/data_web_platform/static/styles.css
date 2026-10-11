@@ -236,15 +236,6 @@ pre { background: #142036; color: #dce5f2; font: 11px/1.8 var(--mono); border-ra
 .dialog-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0 22px; border-top: 1px solid var(--border); }
 .dialog-footer > div { display: flex; gap: 8px; margin-left: auto; }
 .path-text { font: 11px/1.7 var(--mono); color: var(--muted); overflow-wrap: anywhere; max-width: 330px; }
-.login-page { min-height: 100dvh; display: flex; align-items: center; background: var(--surface-soft); }
-.login-shell { width: min(100%, 500px); padding: 36px 24px; }
-.login-shell > .brand { display: flex; justify-content: center; margin-bottom: 32px; }
-.login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 34px; box-shadow: 0 8px 35px #14253f06; }
-.login-card h1 { font-size: 25px; }
-.login-card form { margin-top: 28px; }
-.login-card .button { width: 100%; margin-top: 4px; }
-.login-footnote { font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); margin-top: 26px; padding-top: 18px; line-height: 1.8; }
-.login-bottom { text-align: center; font-size: 12px; color: var(--muted); margin-top: 26px; letter-spacing: 3px; }
 @media (min-width: 1600px) { main { padding-top: 42px; } }
 @media (max-width: 1100px) {
   .topbar { gap: 16px; padding: 14px 22px; }
@@ -320,6 +311,5 @@ pre { background: #142036; color: #dce5f2; font: 11px/1.8 var(--mono); border-ra
   .site-footer { padding-inline: 18px; flex-wrap: wrap; font-size: 10px; }
   .folder-dialog { padding-inline: 18px; }
   .folder-entry { font-size: 10px; }
-  .login-card { padding: 26px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }

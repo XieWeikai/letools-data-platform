@@ -1,4 +1,4 @@
-/* Browser smoke through an SSH tunnel. Never logs or persists the login token. */
+/* Cookie-free browser smoke; SSH is used only to verify exported dataset files. */
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -19,8 +19,6 @@ const readMedia = page => page.locator('video').evaluateAll(nodes => nodes.map(v
   const origin = process.env.DWP_TEST_ORIGIN || 'http://127.0.0.1:18095';
   const out = path.resolve(__dirname, '../.state/browser');
   fs.mkdirSync(out, {recursive: true});
-  const token = execFileSync('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=12', 'marvin',
-    'cat /home/user/projects/data-web-platform/.state/access-token'], {encoding: 'utf8'}).trim();
   const browser = await chromium.launch({headless: true, executablePath:process.env.DWP_TEST_BROWSER || undefined});
   const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
   const page = await context.newPage();
@@ -140,11 +138,16 @@ print(json.dumps({"path": str(p), "version": info["codebase_version"], "dataFile
     }
   }
   try {
+    assert.deepEqual(await context.cookies(origin), [], 'start with no login cookies');
+    const environmentResponse = await context.request.get(origin + '/api/environment');
+    assert.equal(environmentResponse.status(), 200, 'API must work without login');
+    assert(!environmentResponse.headers()['set-cookie'], 'API must not create a login session');
+    const legacyLogin = await context.request.get(origin + '/login', {maxRedirects:0});
+    assert.equal(legacyLogin.status(), 303, 'legacy login URL must redirect to the workbench');
+    assert.equal(legacyLogin.headers().location, '/');
     await page.goto(origin, {waitUntil: 'domcontentloaded'});
-    await page.waitForURL(origin+'/login');
-    await page.getByLabel('访问令牌', {exact:true}).fill(token);
-    await page.getByRole('button', {name: '安全登录'}).click();
     await page.waitForURL(origin + '/');
+    assert.equal(await page.getByLabel('访问令牌', {exact:true}).count(), 0, 'no login form');
     await page.getByRole('heading', {name:'数据处理工作台',exact:true}).waitFor();
     await page.locator('#provider option[value=tianji]').waitFor({state:'attached'});
     assert.equal(await page.locator('#provider').inputValue(), 'tianji');

@@ -1,5 +1,4 @@
-/* Additional read-only viewer coverage and one anomaly-check job; no conversion. */
-const {execFileSync} = require('node:child_process');
+/* Cookie-free viewer coverage and one anomaly-check job; no conversion. */
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
@@ -73,8 +72,6 @@ async function verifyTab(page,tab,dataset,entry,out) {
   const origin = process.env.DWP_TEST_ORIGIN || 'http://127.0.0.1:18095';
   const out = path.resolve(__dirname,'../.state/browser/features');
   fs.mkdirSync(out,{recursive:true});
-  const token = execFileSync('ssh',['-o','BatchMode=yes','-o','ConnectTimeout=12','marvin',
-    'cat /home/user/projects/data-web-platform/.state/access-token'],{encoding:'utf8'}).trim();
   const browser = await chromium.launch({headless:true,executablePath:process.env.DWP_TEST_BROWSER || undefined});
   const context = await browser.newContext({viewport:{width:1440,height:1000}});
   const page = await context.newPage();
@@ -87,11 +84,16 @@ async function verifyTab(page,tab,dataset,entry,out) {
   page.on('console',message=>{if(message.type()==='error')result.consoleErrors.push({text:message.text(),url:message.location().url});});
   page.on('response',response=>{if(response.status()>=400)result.failures.push({status:response.status(),url:response.url()});});
   try {
+    assert.deepEqual(await context.cookies(origin), [], 'start with no login cookies');
+    const environmentResponse = await context.request.get(origin+'/api/environment');
+    assert.equal(environmentResponse.status(),200,'API must work without login');
+    assert(!environmentResponse.headers()['set-cookie'],'API must not create a login session');
+    const legacyLogin = await context.request.get(origin+'/login',{maxRedirects:0});
+    assert.equal(legacyLogin.status(),303,'legacy login URL must redirect to the workbench');
+    assert.equal(legacyLogin.headers().location,'/');
     await page.goto(origin,{waitUntil:'domcontentloaded'});
-    await page.waitForURL(origin+'/login');
-    await page.getByLabel('访问令牌',{exact:true}).fill(token);
-    await page.getByRole('button',{name:'安全登录'}).click();
     await page.waitForURL(origin+'/');
+    assert.equal(await page.getByLabel('访问令牌',{exact:true}).count(),0,'no login form');
     const datasetsResponse = await context.request.get(origin+'/api/datasets');
     assert(datasetsResponse.ok());
     const datasets = await datasetsResponse.json();

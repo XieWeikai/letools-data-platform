@@ -16,22 +16,18 @@ Marvin 上独立部署的 LeTools / Tianji 数据工作台。提供录制目录�
 
 不修改全局 `~/.local/bin/letools`、原 `~/projects/letools` 或全局 `~/.config/letools/providers.toml`。这三项不是本服务的依赖。本服务使用用户级 systemd，不需要 sudo。
 
-### 打开与登录
+### 直接打开工作台
 
-本机已验证可直接访问 `http://marvin-thor.local:8095`，也可使用 `http://<Marvin 的可达 IP>:8095`。`marvin` 是 SSH 配置别名，不一定是浏览器可以解析的主机名。访问口令在服务器私有文件中，按需读取：
+直接访问 `http://marvin-thor.local:8095`，也可使用 `http://<Marvin 的可达 IP>:8095`。`marvin` 是 SSH 配置别名，不一定是浏览器可以解析的主机名。**无需登录或访问令牌**，工作台、公开 API、Visualizer、Annotation 和 Doctor 均可直接使用。旧 `/login` 地址自动跳转到首页，不再创建平台登录会话 Cookie。
 
-```sh
-ssh marvin 'cat ~/projects/data-web-platform/.state/access-token'
-```
-
-口令不写入仓库、不放 URL、不保存到浏览器 localStorage；登录使用 8 小时的 HttpOnly / SameSite Cookie。不要把 8095 直接暴露到公网。HTTP 不加密，跨不可信网络请用 SSH 隧道：
+任何能连接到 8095 端口的人都能使用这些功能，因此仅在可信内网开放，不要直接暴露到公网。HTTP 不加密；远程访问可使用 SSH 隧道，但隧道本身不会关闭服务器的内网监听，仍需通过网络边界或防火墙限制不可信访问：
 
 ```sh
 ssh -N -L 18095:127.0.0.1:8095 marvin
 # 浏览器打开 http://127.0.0.1:18095
 ```
 
-口令是该工作台的共享访问凭证，不是多用户权限系统。使用服务的 `user` 账号权限读写允许目录。默认可浏览 `/home/user` 与 `/media/user/BAG_STORAGE`；生产使用可通过 `DWP_ALLOWED_ROOTS` 缩小范围。不要向不可信用户分发口令。
+本服务不是多用户权限系统，使用服务的 `user` 账号权限读写允许目录。默认可浏览 `/home/user` 与 `/media/user/BAG_STORAGE`；可通过 `DWP_ALLOWED_ROOTS` 缩小范围。同源写入检查、路径边界、禁止覆盖、Doctor 副本操作等保护仍保留。服务端 Next.js 与 loopback 数据桥之间的内部令牌仍保留，它不是用户登录令牌，不需要用户读取或输入。
 
 ## 使用流程
 
@@ -104,7 +100,7 @@ cd ~/projects/data-web-platform
 
 配置由 `DWP_PROJECT_ROOT`、`DWP_LETOOLS_ROOT`、`DWP_STATE_DIR`、`DWP_PYTHON`、`DWP_BUN`、`DWP_HOST`、`DWP_PORT`、`DWP_VIEWER_PORT`、`DWP_ALLOWED_ROOTS` 和 `DWP_DEFAULT_SOURCE` 控制；允许目录用冒号分隔。修改 systemd Environment 后需要 daemon-reload 和重启。
 
-`.state` 可能包含大型 prepare 缓存、测试输出、源路径、日志与访问凭证，不应公开或提交。BAG_STORAGE 空间有限，默认输出建议放系统磁盘的 `~/datasets`。没有自动删除历史数据的任务。
+`.state` 可能包含大型 prepare 缓存、测试输出、源路径、日志与内部服务凭证，不应公开或提交。旧部署遗留的 `access-token` 文件不再用于登录；新启动不生成或读取此用户令牌。BAG_STORAGE 空间有限，默认输出建议放系统磁盘的 `~/datasets`。没有自动删除历史数据的任务。
 
 ## 测试与结构
 
@@ -118,6 +114,6 @@ DWP_VIEWER_SOURCE="$PWD/.state/viewer-cache/source" \
 ~/projects/letools-tianji/.venv/bin/python scripts/smoke_pipeline.py
 ```
 
-`scripts/browser_smoke.cjs` 使用 Playwright 测试实际页面；`scripts/browser_features_smoke.cjs` 另外验证 Statistics、Filtering、Frames、Action Insights 和逐条异常报告。两者需要运行服务、可达 origin 和测试数据，默认通过本地 SSH 隧道访问 Marvin，凭证仅保存在进程内。补测脚本可通过 `DWP_EXISTING_CHECK_JOB=<id>` 复用已有检查报告，避免重复读取原始录制。
+`scripts/browser_smoke.cjs` 使用 Playwright 测试实际页面；`scripts/browser_features_smoke.cjs` 另外验证 Statistics、Filtering、Frames、Action Insights 和逐条异常报告。两者需要运行服务、可达 origin 和测试数据，默认通过本地 SSH 隧道访问 Marvin；均以无登录 Cookie 的新上下文检查直接访问，不读取访问令牌。主浏览器脚本仍通过 SSH 只读核验导出文件。补测脚本可通过 `DWP_EXISTING_CHECK_JOB=<id>` 复用已有检查报告，避免重复读取原始录制。
 
 架构、入口与扩展位置见 `docs/architecture.md`；实际样本、浏览器与隔离验收记录见 `docs/verification.md`。测试数据、浏览器截图和报告位于 `.state/`，不含在 Git 提交中。

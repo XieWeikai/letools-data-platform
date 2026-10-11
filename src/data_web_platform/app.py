@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-import hashlib
-import hmac
 import json
-import os
 import subprocess
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -87,29 +82,9 @@ def prepare_job(payload: JobRequest, config, providers):
     return request
 
 
-class Login(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    token: str
-
-
 class DatasetPath(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str
-
-
-def session_value(secret, expires=None):
-    value = str(expires or int(time.time()) + 8 * 3600)
-    return value + "." + hmac.new(secret.encode(), value.encode(), hashlib.sha256).hexdigest()
-
-
-def valid_session(secret, cookie):
-    try:
-        expires, _ = cookie.split(".", 1)
-        if int(expires) < time.time():
-            return False
-        return hmac.compare_digest(cookie, session_value(secret, int(expires)))
-    except (AttributeError, ValueError):
-        return False
 
 
 def create_app(config=None, *, start_services=True):
@@ -120,7 +95,6 @@ def create_app(config=None, *, start_services=True):
     viewer = ViewerService(config, registry)
     providers = []
     environment_error = None
-    login_attempts = {}
 
     @asynccontextmanager
     async def lifespan(app):
@@ -143,24 +117,20 @@ def create_app(config=None, *, start_services=True):
     app.state.providers = lambda: providers
 
     @app.middleware("http")
-    async def authenticate(request: Request, call_next):
+    async def protect_requests(request: Request, call_next):
         path = request.url.path
-        public = path in {"/login", "/health", "/api/session"} or path.startswith("/static/")
-        # Same-origin cookie auth; never turn a logged-in browser into a cross-site write proxy.
+        # Trusted-network access needs no login, but other sites must not turn
+        # a browser visiting the platform into a cross-site write proxy.
         origin = request.headers.get("origin")
         if request.method not in {"GET", "HEAD", "OPTIONS"} and origin:
             expected = urlsplit(str(request.url))
             actual = urlsplit(origin)
             if (actual.scheme, actual.netloc) != (expected.scheme, expected.netloc):
                 return JSONResponse({"detail": "拒绝跨站请求"}, status_code=403)
-        if not public and not valid_session(config.auth_token, request.cookies.get("dwp_session")):
-            if path == "/" or path.startswith("/viewer") or path == "/doctor":
-                return RedirectResponse("/login", status_code=303)
-            return JSONResponse({"detail": "请先登录"}, status_code=401)
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        if path.startswith("/api/") and not path.startswith("/api/proxy"):
+        if path in {"/", "/login"} or (path.startswith("/api/") and not path.startswith("/api/proxy")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -179,33 +149,6 @@ def create_app(config=None, *, start_services=True):
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "data-web-platform"}
-
-    @app.get("/api/session")
-    def session(request: Request):
-        return {"authenticated": valid_session(config.auth_token, request.cookies.get("dwp_session"))}
-
-    @app.post("/api/session")
-    def login(payload: Login, request: Request):
-        address = request.client.host if request.client else "unknown"
-        recent = [t for t in login_attempts.get(address, []) if time.monotonic() - t < 60]
-        if len(recent) >= 10:
-            raise HTTPException(429, "尝试次数过多，请一分钟后重试")
-        if not hmac.compare_digest(payload.token, config.auth_token):
-            if len(login_attempts) > 1000:
-                login_attempts.clear()
-            login_attempts[address] = [*recent, time.monotonic()]
-            raise HTTPException(401, "访问口令不正确")
-        login_attempts.pop(address, None)
-        response = JSONResponse({"authenticated": True})
-        response.set_cookie("dwp_session", session_value(config.auth_token), max_age=8 * 3600,
-                            httponly=True, samesite="strict", secure=request.url.scheme == "https", path="/")
-        return response
-
-    @app.delete("/api/session")
-    def logout():
-        response = JSONResponse({"authenticated": False})
-        response.delete_cookie("dwp_session", path="/")
-        return response
 
     @app.get("/api/environment")
     def environment():
@@ -276,7 +219,8 @@ def create_app(config=None, *, start_services=True):
 
     @app.get("/login")
     def login_page():
-        return FileResponse(static / "login.html")
+        # Keep old bookmarks and already-open login tabs usable after upgrade.
+        return RedirectResponse("/", status_code=303)
 
     return app
 

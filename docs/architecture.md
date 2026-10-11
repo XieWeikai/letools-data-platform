@@ -4,17 +4,19 @@ Python 3.12 / FastAPI 的单进程工作台，原生 HTML/CSS/JS 操作面板，
 
 ## 请求链路
 
-浏览器 → Cookie 与同源校验 → Pydantic 请求模型 → canonical path / provider / 新目标校验 → 单任务队列 → 独立 Python 子进程 → Tianji check/prepare → LeTools convert → deep validation → 防覆盖发布 → 注册数据集。
+浏览器 → 同源写入校验 → Pydantic 请求模型 → canonical path / provider / 新目标校验 → 单任务队列 → 独立 Python 子进程 → Tianji check/prepare → LeTools convert → deep validation → 防覆盖发布 → 注册数据集。
+
+平台不要求用户登录或访问令牌，不创建登录会话 Cookie；旧 `/login` 跳转到首页。可连接到 Web 端口的用户均可使用工作台与 API，因此网络可达范围就是访问边界，只应向可信内网开放。同源检查不能替代网络访问控制。
 
 读取视频时不重新扫描全部 Parquet；登记数据集和 Doctor 前执行完整布局检查。实际文件路径再次验证，禁止越出数据集或允许根目录。路径策略不是针对同一 Unix 账号恶意并发修改符号链接的操作系统沙箱。
 
-Viewer 由平台管理，监听 loopback。浏览器经 `/viewer` 代理，文件与 Annotation 走同源接口。服务端 Next.js 请求通过独立、带令牌的 loopback 数据桥访问本地数据；内部令牌不会成为公开接口的鉴权旁路。
+Viewer 由平台管理，监听 loopback。浏览器经 `/viewer` 代理，文件与 Annotation 走同源接口，无需平台登录。服务端 Next.js 请求仍通过独立、带令牌的 loopback 数据桥访问本地数据；这个内部令牌不发送给浏览器，不因移除用户登录而取消。内部服务边界、路径与防覆盖校验保持不变。
 
 ## 模块
 
 | 要修改的功能 | 文件 |
 | --- | --- |
-| 路由、登录、provider 发现、录制列表 | `src/data_web_platform/app.py` |
+| 路由、同源写入检查、provider 发现、录制列表 | `src/data_web_platform/app.py` |
 | 环境与隔离配置 | `config.py`、`scripts/install_isolation.py` |
 | 参数与拒绝不支持的选项 | `models.py` |
 | 文件路径边界、全新输出检查 | `paths.py` |
