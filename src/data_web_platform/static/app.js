@@ -105,7 +105,7 @@
   const STORAGE_KEY = "data-web-platform.preferences.v1";
   const preferenceIds = ["provider", "source-root", "destination", "task", "fps", "target-version", "max-gap-ms", "command-max-age-ms", "gripper-max-gap-ms", "state-resampling", "trim-stationary", "motion-joint-threshold-rad", "motion-gripper-threshold", "workers", "video-workers"];
   const STATUS = { queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消" };
-  const STAGE = { queued: "等待执行", check: "检查数据", prepare: "对齐与准备", convert: "生成数据集", validate: "验证输出", doctor: "Doctor 诊断", score: "质量评分", gate: "训练准入", fix: "修复副本", trim: "裁剪副本", "merge-check": "合并预检" };
+  const STAGE = { queued: "等待执行", check: "检查数据", check_prepare: "检查与准备", prepare: "对齐与准备", convert: "生成数据集", validate: "验证输出", doctor: "Doctor 诊断", score: "质量评分", gate: "训练准入", fix: "修复副本", trim: "裁剪副本", "merge-check": "合并预检" };
   const ACTIVE = new Set(["queued", "running"]);
   const state = {
     environment: null, preferences: {}, recordings: [], selection: new Set(), page: 0,

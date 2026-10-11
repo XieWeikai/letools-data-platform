@@ -32,7 +32,7 @@ def run(request_file):
     os.nice(10)
     from tianji_provider.provider import TianjiConfig, provider
     from tianji_provider.diagnostics import check_dataset
-    from tianji_provider.prepare import prepare
+    from tianji_provider.fused import check_and_prepare
     from letools.conversion import convert, ConversionConfig
     from letools.validation import validate_dataset
 
@@ -60,10 +60,20 @@ def run(request_file):
         timings[name] = time.monotonic() - started
         emit("stage", name=name, status="succeeded", seconds=timings[name])
 
-    started = stage("check")
     def on_record(index, total, item):
         emit("check_result", completed=index, total=total, item=item)
-    report = check_dataset(selected, cfg, deep_video=True, progress=on_record)
+    if request["kind"] == "check":
+        phase = "check"
+        started = stage(phase)
+        report = check_dataset(selected, cfg, deep_video=True, progress=on_record)
+        manifest = None
+    else:
+        phase = "check_prepare"
+        started = stage(phase)
+        fused = check_and_prepare(selected, job_dir / "cache", cfg, progress=on_record,
+                                  video_encoder=request.get("video_encoder", "auto"),
+                                  prepare_valid_only=False)
+        report, manifest = fused["report"], fused["manifest"]
     (job_dir / "check.json").write_text(json.dumps(report, indent=2, ensure_ascii=False))
     emit("check_report", report=report)
     if report["recordings"] != len(request["recordings"]):
@@ -71,16 +81,13 @@ def run(request_file):
     if not report["valid"]:
         raise ValueError(f"严格检查未通过：{report['invalid_recordings']} 条异常。请取消选择异常轨迹后重新提交；没有删除或拆分源数据。")
     if fingerprint(request["recordings"]) != before:
-        raise ValueError("检查期间原始数据发生变化，请等待录制关闭后重新检查")
-    done("check", started)
+        raise ValueError("检查/准备期间原始数据发生变化，请等待录制关闭后重新检查")
+    done(phase, started)
     if request["kind"] == "check":
         emit("result", result={"valid": True, "recordings": report["recordings"], "timings": timings})
         return
-    started = stage("prepare")
-    manifest = prepare(selected, job_dir / "cache", cfg)
-    if fingerprint(request["recordings"]) != before:
-        raise ValueError("准备期间原始数据发生变化，拒绝发布输出")
-    done("prepare", started)
+    if manifest is None:
+        raise ValueError("融合检查通过但未生成完整缓存，拒绝转换")
     emit("prepared", episodes=len(manifest["episodes"]), timings=manifest.get("timings", {}))
     started = stage("convert")
     source = provider.open(job_dir / "cache", cfg)
