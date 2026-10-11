@@ -516,11 +516,17 @@
     report.download = `${job.id}-report.json`;
     show(report, true);
     const result = job.result ?? {};
-    const episodes = result.total_episodes ?? result.episodes ?? job.check_report?.valid_recordings;
-    const frames = result.total_frames ?? result.frames ?? job.check_report?.valid_frames;
+    const published = job.status === "succeeded" && Boolean(result.destination || result.dataset);
+    const preview = job.kind === "editor" && job.request?.operation === "plan";
+    // A failed mixed selection can have valid recordings but no output at all.
+    // Label those counts as check results, never as published dataset contents.
+    const episodes = published ? result.total_episodes ?? result.episodes
+      : preview ? result.plan?.episodes : job.check_report?.valid_recordings;
+    const frames = published ? result.total_frames ?? result.frames
+      : preview ? result.plan?.frames : job.check_report?.valid_frames;
     const facts = [];
-    if (typeof episodes === "number") facts.push(resultStat(job.kind === "check" ? "通过检查的轨迹" : "输出轨迹", number(episodes)));
-    if (typeof frames === "number") facts.push(resultStat(job.kind === "check" ? "有效对齐帧数" : "输出帧数", number(frames)));
+    if (typeof episodes === "number") facts.push(resultStat(published ? "输出轨迹" : preview ? "计划保留轨迹" : "通过检查的轨迹", number(episodes)));
+    if (typeof frames === "number") facts.push(resultStat(published ? "输出帧数" : preview ? "计划保留帧数" : "有效对齐帧数", number(frames)));
     if (job.status === "succeeded") facts.push(resultStat("任务总耗时", duration(job.elapsed_seconds)));
     replace(byId("job-result"), facts);
     show(byId("job-result"), Boolean(facts.length));
