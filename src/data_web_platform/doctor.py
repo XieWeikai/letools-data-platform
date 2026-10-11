@@ -10,6 +10,7 @@ from __future__ import annotations
 import html
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
@@ -100,29 +101,55 @@ def build_doctor_command(payload: dict | DoctorRequest, registry, config) -> lis
 def run_check(path: Path, *, checks=None, max_episodes=None, urdf=None, workspace=None) -> dict:
     from lerobot_doctor.dataset_loader import load_local
     from lerobot_doctor.report import report_to_json
-    from lerobot_doctor.runner import run_checks
+    from lerobot_doctor.runner import CheckResult, Severity, run_checks
+    from .doctor_compat import ACTION_CHECKS, ALIAS_MESSAGE, SOURCE_ACTION, action_dataset_view, action_view
     dataset = load_local(path, max_episodes=max_episodes)
     if dataset.info is None:
         raise ValueError(f"Doctor 无法加载数据集: {dataset.info_error}")
     if urdf:
         dataset.robot_urdf = Path(urdf)
-    report = run_checks(dataset, checks=checks)
     note = None
-    if checks is None or "training" in checks:
-        from lerobot_doctor.checks.training import check_training
-        from .doctor_compat import ALIAS_MESSAGE, action_view, training_view
+    requested = list(checks) if checks else list(CHECKS)
+    if ACTION_CHECKS.intersection(requested):
         with action_view(path, workspace=workspace) as (view, note):
             if note:
-                # All twelve source checks still run on the actual dataset.
-                # Re-run only the name-incompatible checker with a read-only
-                # view; no other quality failures or warnings are suppressed.
-                adapted = check_training(training_view(dataset, view))
-                for episode in dataset.episodes_data:
-                    if "observation.action" not in episode.columns:
-                        adapted.fail(f"Episode {episode.episode_index}: declared observation.action is missing from data")
-                adapted.pass_(ALIAS_MESSAGE)
-                report.results = [adapted if result.name == adapted.name else result
-                                  for result in report.results]
+                alias = action_dataset_view(dataset, view)
+                missing = [episode.episode_index for episode in dataset.episodes_data
+                           if SOURCE_ACTION not in episode.columns]
+                report = None
+                for name in requested:
+                    # Run unchanged upstream algorithms/thresholds with the
+                    # correct command name. All non-action checks use the
+                    # original root, features and observations (including
+                    # nested wrench windows); do not hide or flatten them.
+                    target = alias if name in ACTION_CHECKS else dataset
+                    if missing and name in ACTION_CHECKS:
+                        # Without command data the upstream fallback scans all
+                        # observations as actions. Report this broken contract
+                        # explicitly rather than diagnosing unrelated sensors.
+                        item = CheckResult(name=name, severity=Severity.FAIL)
+                        for index in missing:
+                            item.fail(f"Episode {index}: declared observation.action is missing from data")
+                        from lerobot_doctor.runner import DiagnosticReport
+                        partial = DiagnosticReport(dataset_path=str(path), results=[item],
+                            codebase_version=dataset.info.codebase_version,
+                            format_version=dataset.info.format_version,
+                            total_episodes=dataset.info.total_episodes,
+                            total_frames=dataset.info.total_frames, fps=dataset.info.fps)
+                    else:
+                        partial = run_checks(target, checks=[name])
+                    if name in ACTION_CHECKS:
+                        for item in partial.results:
+                            item.pass_(ALIAS_MESSAGE)
+                    if report is None:
+                        report = replace(partial, dataset_path=dataset.display_path or str(path),
+                                         dataset_name=path.name, results=[])
+                    report.results.extend(partial.results)
+                note = {**note, "applied_checks": [name for name in requested if name in ACTION_CHECKS]}
+            else:
+                report = run_checks(dataset, checks=checks)
+    else:
+        report = run_checks(dataset, checks=checks)
     result = json.loads(report_to_json(report))
     if note:
         result["compatibility"] = note

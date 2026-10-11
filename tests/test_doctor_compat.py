@@ -153,9 +153,85 @@ def test_compatibility_does_not_change_other_checks(tmp_path):
     from lerobot_doctor.report import report_to_json
     from lerobot_doctor.runner import run_checks
     root = tianji_dataset(tmp_path)
-    checks = ["actions", "temporal", "training"]
+    checks = ["statistics", "temporal", "training"]
     original = json.loads(report_to_json(run_checks(load_local(root), checks=checks)))
     adapted = run_check(root, checks=checks)
     assert adapted["checks"][:2] == original["checks"][:2]
     assert original["checks"][2]["severity"] == "FAIL"
     assert adapted["checks"][2]["severity"] != "FAIL"
+
+
+def add_wrench_windows(root, *, nan=False):
+    """Real provider shape: one [4, 12] high-rate history per dataset row."""
+    key = "observation.wrench_windows"
+    info_file = root / "meta/info.json"
+    info = json.loads(info_file.read_text())
+    info["features"][key] = {"dtype": "float32", "shape": [4, 12]}
+    info_file.write_text(json.dumps(info))
+    for file in (root / "data").rglob("*.parquet"):
+        table = pq.read_table(file)
+        values = np.arange(len(table) * 4 * 12, dtype=np.float32).reshape(-1, 4, 12) / 1000
+        if nan:
+            values[7, 2, 3] = np.nan
+        pq.write_table(table.append_column(key, pa.array(values.tolist())), file)
+
+
+@pytest.mark.parametrize("version", ["v2.1", "v3.0"])
+def test_all_checks_support_nested_wrench_without_changing_source(tmp_path, version):
+    from data_web_platform.doctor import CHECKS
+    root = tianji_dataset(tmp_path, version)
+    add_wrench_windows(root)
+    before = dataset_fingerprint(root)
+    report = run_check(root)
+    assert len(report["checks"]) == len(CHECKS) == 12
+    assert report["dataset_path"] == str(root)
+    assert report["dataset_name"] == root.name
+    assert report["compatibility"]["applied_checks"] == ["actions", "training", "per_episode", "kinematics"]
+    assert before == dataset_fingerprint(root)
+
+
+def test_wrench_nan_is_still_diagnosed_by_original_statistics(tmp_path):
+    root = tianji_dataset(tmp_path)
+    add_wrench_windows(root, nan=True)
+    report = run_check(root)
+    distribution = next(item for item in report["checks"] if item["name"] == "Data Distribution")
+    assert distribution["severity"] == "FAIL"
+    assert "observation.wrench_windows: 1 NaN values" in json.dumps(distribution)
+
+
+def test_action_checks_match_canonical_commands_not_other_observations(tmp_path):
+    from lerobot_doctor.dataset_loader import load_local
+    from lerobot_doctor.report import report_to_json
+    from lerobot_doctor.runner import run_checks
+    from data_web_platform.doctor_compat import ALIAS_MESSAGE
+    canonical = make_dataset(tmp_path / "canonical", length=120)
+    root = tianji_dataset(tmp_path)
+    add_wrench_windows(root)
+    selected = ["actions", "per_episode"]
+    expected = json.loads(report_to_json(run_checks(load_local(canonical), checks=selected)))
+    actual = run_check(root, checks=selected)
+    for item in actual["checks"]:
+        item["messages"] = [message for message in item["messages"] if message["message"] != ALIAS_MESSAGE]
+    assert actual["checks"] == expected["checks"]
+
+
+def test_check_never_overwrites_an_undeclared_action_column(tmp_path):
+    root = tianji_dataset(tmp_path)
+    file = next((root / "data").rglob("*.parquet"))
+    table = pq.read_table(file)
+    pq.write_table(table.append_column("action", table.column("observation.action")), file)
+    before = dataset_fingerprint(root)
+    with pytest.raises(ValueError, match="undeclared canonical action"):
+        run_check(root)
+    assert before == dataset_fingerprint(root)
+
+
+def test_missing_commands_with_nested_wrench_report_failure_not_exception(tmp_path):
+    root = tianji_dataset(tmp_path)
+    add_wrench_windows(root)
+    file = next((root / "data").rglob("*.parquet"))
+    pq.write_table(pq.read_table(file).drop_columns("observation.action"), file)
+    report = run_check(root)
+    assert len(report["checks"]) == 12
+    assert report["overall_severity"] == "FAIL"
+    assert "observation.action is missing from data" in json.dumps(report)

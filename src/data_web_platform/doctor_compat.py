@@ -1,6 +1,6 @@
 """Read-only Tianji action-name compatibility for upstream Doctor consumers.
 
-The source is never renamed or patched. Training receives an immutable loaded
+The source is never renamed or patched. Action-dependent checks receive a loaded
 dataset view; score/gate receive private, disposable metadata/action projections.
 Only an explicit ``observation.action`` feature with no canonical action feature
 is eligible. Existing action fields always retain their upstream semantics.
@@ -16,6 +16,7 @@ from pathlib import Path
 
 SOURCE_ACTION = "observation.action"
 ACTION = "action"
+ACTION_CHECKS = frozenset({"actions", "per_episode", "training", "kinematics"})
 ALIAS_MESSAGE = (
     "Web read-only compatibility: observation.action is inspected as action; "
     "source feature names, values and files are unchanged."
@@ -59,7 +60,7 @@ def action_view(root: Path, *, workspace=None, tables=False):
                     stats = {**stats, ACTION: stats[SOURCE_ACTION]}
                 (meta / "stats.json").write_text(json.dumps(stats))
         note = {"source": SOURCE_ACTION, "target": ACTION, "read_only": True,
-                "message": ALIAS_MESSAGE, "scope": ["training", "score", "gate"]}
+                "message": ALIAS_MESSAGE, "scope": sorted(ACTION_CHECKS) + ["score", "gate"]}
         if tables:
             # Gate only reads episode metadata; no video or unrelated payload is
             # copied. The source registry/deep inspection remains authoritative.
@@ -123,8 +124,16 @@ def _project_actions(root, view, feature):
         pq.write_table(pa.concat_tables(pieces), data / f"episode_{index:09d}.parquet")
 
 
-def training_view(dataset, root):
-    """Return new containers, sharing only arrays that upstream only reads."""
+def action_dataset_view(dataset, root):
+    """Alias only declared command data; preserve all other loaded columns.
+
+    The calling checks only read the shared arrays. New dataclass/dict containers
+    prevent renaming the original view. An undeclared canonical column must not
+    be silently overwritten: it could contain a different control signal.
+    """
+    for episode in dataset.episodes_data:
+        if any(key.startswith(ACTION) for key in episode.columns):
+            raise ValueError("Doctor action alias conflicts with undeclared canonical action columns")
     info = dataset.info
     features = {**info.features, ACTION: info.features[SOURCE_ACTION]}
     return replace(dataset, root=root,
