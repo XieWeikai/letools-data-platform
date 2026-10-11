@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据集编辑 · Data Web Platform</title>
+  <link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/editor.css">
+  <script src="/static/editor.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">跳转到编辑区</a>
+<header class="topbar"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">D</span><span>Data Web <strong>Platform</strong><small>LeRobot 数据集编辑</small></span></a><a class="button secondary" href="/">返回工作台</a><span id="editor-status" class="badge neutral">正在连接</span></header>
+<main id="main" tabindex="-1">
+  <div class="page-heading"><div><p class="eyebrow">DATASET EDITOR</p><h1>编辑数据集</h1><p class="subtitle">组合修改任务、筛选轨迹、移除字段和调整视频，生成新的数据集。</p></div></div>
+  <div id="editor-error" class="notice error" role="alert" tabindex="-1" hidden></div>
+  <section class="panel"><div class="panel-heading"><h2>1. 选择数据集</h2><button id="reload-source" class="button secondary" type="button">重新加载</button></div><div class="panel-body">
+    <label for="editor-dataset">已登记的 LeRobot 数据集</label><select id="editor-dataset"><option value="">正在读取…</option></select>
+    <p class="field-help">可先在工作台“数据集”页登记已有 v2.1 / v3.0 目录。</p><p id="source-summary" class="path-text" role="status"></p>
+    <p class="field-help">编辑保持源版本、FPS 和保留轨迹的帧数。所有 episode ID 均指编辑前的编号；输出会重新连续编号。</p>
+  </div></section>
+  <form id="editor-form">
+    <div class="workspace-grid editor-grid">
+      <section class="panel"><div class="panel-heading"><h2>2. 轨迹与任务文本</h2><span id="selection-count" class="badge neutral">0 已选择</span></div><div class="panel-body">
+        <div class="editor-toolbar"><button type="button" id="select-page" class="text-button">选择本页</button><button type="button" id="select-all-episodes" class="text-button">选择全部</button><button type="button" id="clear-episodes" class="text-button">清空选择</button></div>
+        <div class="field"><label for="bulk-task">为所选轨迹设置任务文本</label><textarea id="bulk-task" rows="2" maxlength="4096" placeholder="例如：Pick up the block and place it in the tray"></textarea></div>
+        <div class="editor-toolbar"><button type="button" id="set-tasks" class="button secondary">设置所选 task</button><button type="button" id="delete-episodes" class="button danger">从输出移除所选轨迹</button><button type="button" id="reset-episodes" class="text-button">撤销所选编辑</button></div>
+        <p class="field-help">勾选用于批量操作，本身不会删除轨迹。移除仅影响新输出，原数据集保留。</p>
+        <details><summary>批量导入任务映射 JSON</summary><div class="field"><label for="task-json">以原始 episode ID 为键、任务文本为值</label><textarea id="task-json" rows="3" placeholder='{"0": "Pick up the block", "2": "Place the block"}'></textarea><button type="button" class="button secondary" id="import-tasks">合并任务映射</button></div></details>
+      </div><div class="editor-table-wrap"><table class="editor-table"><thead><tr><th scope="col">选择</th><th scope="col">原 ID / 帧数</th><th scope="col">任务文本 / 待执行修改</th></tr></thead><tbody id="episode-rows"></tbody></table></div>
+      <div class="pagination"><span id="page-label"></span><div><button type="button" id="episode-prev" class="text-button">上一页</button><button type="button" id="episode-next" class="text-button">下一页</button></div></div></section>
+      <div class="editor-stack">
+        <section class="panel"><div class="panel-heading"><h2>3. 字段与相机</h2></div><div class="panel-body"><p class="field-help">勾选要从输出移除的字段。删除相机也会移除对应视频和统计；系统索引不可删除。</p><div id="feature-options" class="editor-checks"></div></div></section>
+        <section class="panel"><div class="panel-heading"><h2>4. 视频处理</h2></div><div class="panel-body">
+          <label class="checkbox-line"><input type="checkbox" id="video-enabled"><span>重新编码视频 / 调整分辨率</span></label><p class="field-help">关闭时尽量复用视频；删除 v3.0 轨迹时，上游可能需重封装或转码，预览计划会说明。</p>
+          <div id="video-controls" hidden>
+            <div class="field"><label for="video-codec">编码器</label><select id="video-codec"><option value="libx264">H.264 · libx264</option><option value="mjpeg">MJPEG</option></select></div>
+            <div class="field-grid"><div class="field"><label for="video-width">宽度（像素，可留空）</label><input id="video-width" type="number" min="2" max="8192" step="2"></div><div class="field"><label for="video-height">高度（像素，可留空）</label><input id="video-height" type="number" min="2" max="8192" step="2"></div></div><p class="field-help">同时留空保留原尺寸；填写后精确缩放到指定宽高，可能改变长宽比。</p>
+            <div id="h264-options" class="field-grid"><div class="field"><label for="video-crf">H.264 CRF（越低画质越高）</label><input id="video-crf" type="number" min="0" max="51" value="23"></div><div class="field"><label for="video-preset">编码速度</label><select id="video-preset"><option>ultrafast</option><option>superfast</option><option selected>veryfast</option><option>faster</option><option>fast</option><option>medium</option><option>slow</option><option>slower</option><option>veryslow</option></select></div></div>
+            <div id="mjpeg-options" class="field" hidden><label for="video-quality">MJPEG quality（越低画质越高）</label><input id="video-quality" type="number" min="1" max="31" value="2"></div>
+            <div class="field"><label for="pixel-format">像素格式</label><select id="pixel-format"><option value="">编码器默认</option><option>yuv420p</option><option>yuv422p</option><option>yuv444p</option><option>yuvj420p</option><option>yuvj422p</option><option>yuvj444p</option></select></div>
+            <p class="field-help">要处理的相机（不勾选表示所有保留相机）：</p><div id="camera-options" class="editor-checks"></div>
+          </div>
+        </div></section>
+      </div>
+    </div>
+    <section class="panel"><div class="panel-heading"><h2>5. 输出与执行</h2></div><div class="panel-body">
+      <div class="field"><label for="editor-output">新数据集绝对路径</label><div class="path-input"><input id="editor-output" required placeholder="/home/user/datasets/pick_and_place_edited"><button type="button" id="browse-output" class="button secondary">选择父目录</button></div><p class="field-help">必须使用新目录。原始数据不被覆盖。输出不复制自定义附属文件，包括已有 Annotation 标注；原数据集及标注保留。</p></div>
+      <details><summary>执行资源</summary><div class="field-grid"><div class="field"><label for="editor-workers">文件 workers（留空自动）</label><input id="editor-workers" type="number" min="1" max="8"></div><div class="field"><label for="codec-threads">每个编码器线程（留空自动）</label><input id="codec-threads" type="number" min="1" max="8"></div><div class="field"><label for="batch-rows">Parquet 批次行数</label><input id="batch-rows" type="number" min="1" max="1048576" value="65536"></div></div><p class="field-help">自动设置依据可用资源和任务数计算，预览计划显示最终并发。编辑不改变 FPS，不提供帧区间裁剪。</p></details>
+      <p id="edit-summary" role="status">尚无编辑操作</p>
+      <div class="submit-actions"><button type="submit" class="button secondary" id="preview-edit" disabled>预览编辑计划</button><button type="button" class="button primary" id="apply-edit" disabled>执行编辑并生成新数据集</button></div><p class="field-help">先查看计划与警告，再执行。修改参数后需重新预览。</p>
+    </div></section>
+  </form>
+  <section class="panel" id="editor-job"><div class="panel-heading"><h2>编辑计划与任务</h2><button type="button" id="cancel-edit" class="button danger" hidden>取消任务</button></div><div class="panel-body">
+    <p id="job-status" role="status" aria-live="polite">预览计划后将在此显示影响范围。</p><div id="plan-summary" class="result-summary" hidden></div><ul id="plan-warnings"></ul>
+    <div id="editor-result-links" class="dataset-actions"></div><details><summary>完整计划 / 执行报告</summary><pre id="editor-report" class="issue-data"></pre></details><details><summary>运行日志</summary><pre id="editor-logs" class="issue-data"></pre></details>
+  </div></section>
+</main>
+<dialog id="output-dialog" class="folder-dialog" aria-labelledby="output-dialog-title"><div class="dialog-header"><h2 id="output-dialog-title">选择输出父目录</h2><button type="button" id="close-output" class="icon-button" aria-label="关闭">×</button></div>
+  <form id="browse-path-form" class="path-input"><label class="sr-only" for="browse-path">服务器父目录</label><input id="browse-path"><button class="button secondary">前往</button></form><p id="browse-error" role="alert"></p><button type="button" id="browse-parent" class="text-button">上一级</button><div id="browse-directories" class="folder-list"></div><div class="field"><label for="output-name">新数据集目录名</label><input id="output-name" value="edited_dataset"></div><div class="dialog-footer"><button type="button" id="use-output" class="button primary">使用此目录</button></div>
+</dialog>
+</body></html>

@@ -235,6 +235,9 @@ class JobManager:
     def submit_doctor(self, request):
         return self._submit({**request, "kind": "doctor"}, "data_web_platform.doctor_worker")
 
+    def submit_editor(self, request):
+        return self._submit(request, "data_web_platform.editor_worker")
+
     def get(self, job_id):
         with self.lock:
             if job_id not in self.records:

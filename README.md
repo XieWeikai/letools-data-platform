@@ -58,6 +58,28 @@ ssh -N -L 18095:127.0.0.1:8095 marvin
 - Doctor trim 支持正整数 FPS、标准单流 MP4、偶数宽高 RGB 视频；缺帧/非连续时间轴/不支持格式会拒绝，不擅自补帧或缩放。dry-run 不创建输出，也不声称已验证视频。
 - 上游 Hub 相关入口保留，但上传需显式配置认证和全新的远端仓库。部署验收不向 Hugging Face 创建或上传数据。
 
+### 数据集编辑器（LeTools editor）
+
+在“数据集”卡片点击“编辑数据集”，或打开 `/editor`。先加载已登记的 v2.1 / v3.0 数据集，可按原始 episode ID 单条修改 task，也可多选批量改 task、从输出移除轨迹，或合并粘贴的 JSON 任务映射。移除字段支持数值、嵌入图像及视频相机；五个系统时间/索引字段不可移除。
+
+视频处理默认关闭以尽量复用原编码。开启后可选择全部或指定保留相机，使用 H.264 / MJPEG，设置精确宽高、像素格式、CRF/preset 或 quality。精确缩放可能改变长宽比。高级资源支持自动规划或显式 workers / codec threads，以及 Parquet batch rows。Web 只使用服务器 `/usr/bin/ffmpeg`，不接收任意可执行路径。
+
+先“预览编辑计划”，查看输出轨迹/帧数、文件复用/重写/转码数量和上游警告；计划是队列中的只读任务，不生成数据集。参数或源数据改变后必须重新预览。然后执行到全新的输出目录，后台重新计划、编辑、deep validation、源数据稳定性检查及原子防覆盖发布；成功后自动登记，可打开 Viewer 或继续编辑。
+
+编辑保持源 LeRobot 版本、FPS 和保留 episode 的长度；不提供原地覆盖、改 FPS 或任意帧裁剪。源数据与原始录制不变。上游不会复制自定义根/附属文件，已有 Annotation 标注也不迁移；它们保留在源数据集。删除 v3 中间 episode 可能需要视频重封装，无法证明 H.264 安全切包时会回退到转码，计划会提示。编辑任务共用单通道队列、取消、历史日志和报告；上游没有逐帧进度回调，因此执行时显示阶段与耗时，不虚构百分比。
+
+源/输出路径沿用平台白名单，输出必须与源完全分离。为避免误读外部资源，当前 Editor 入口拒绝包含符号链接的数据集。强制取消可能留下私有暂存/上游锁文件，它们不会发布或自动登记，可保留排查。
+
+安装在同一个专用 venv（已有 Rust >=1.88 和平台 linker 时）：
+
+```sh
+~/.local/bin/uv pip install --python ~/projects/letools-tianji/.venv/bin/python \
+  -e ~/projects/letools-tianji/packages/letools-editor
+~/projects/letools-tianji/.venv/bin/letools editor --help
+```
+
+仅安装 editor 插件，不使用 `uv tool install --force`，不修改全局 LeTools。Rust 未安装时可将工具链放到本项目 `.state/editor-toolchain`，安装时显式设置 CARGO_HOME/RUSTUP_HOME/PATH，不改用户启动脚本。不要执行会移除可选包的 base-only `uv sync`。测试覆盖新输出保护、计划失效、两种版本、task/episode/feature 组合编辑、H.264/MJPEG 缩放和统计重算。
+
 ## 环境与维护
 
 命令行使用本环境，不改变别人用的全局命令：

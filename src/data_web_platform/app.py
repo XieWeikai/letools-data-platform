@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from .config import Config
 from .datasets import DatasetRegistry
 from .doctor import create_doctor_router
+from .editor import create_editor_router
 from .jobs import JobManager
 from .models import JobRequest
 from .paths import browse_directory, validate_path, validate_output_path
@@ -209,6 +210,7 @@ def create_app(config=None, *, start_services=True):
         return registry.register(payload.path)
 
     app.include_router(create_doctor_router(config, registry, jobs))
+    app.include_router(create_editor_router(config, registry, jobs))
     app.include_router(create_viewer_router(config, registry, service=viewer))
     static = Path(__file__).parent / "static"
     app.mount("/static", StaticFiles(directory=static, check_dir=False), name="static")
