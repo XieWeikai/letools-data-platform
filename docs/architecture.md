@@ -1,45 +1,122 @@
-# 维护入口
+# 架构与代码导航
 
-Python 3.12 / FastAPI 的单进程工作台，原生 HTML/CSS/JS 操作面板，Next.js/Bun 上游 Viewer 子进程。没有外部数据库；注册表、任务状态与报告以私有 JSON 文件持久化，写入采用临时文件替换和必要的文件锁。
+平台0.2.0，最后核验2026-10-12。本仓库是一层Web编排，不承担机器人控制或训练，也不将对齐算法复制到HTTP路由里。
 
-## 请求链路
+## 三个独立项目与两层“前后端”
 
-浏览器 → 同源写入校验 → Pydantic 请求模型 → canonical path / provider / 新目标校验 → 单任务队列 → 独立 Python 子进程 → Tianji check/prepare → LeTools convert → deep validation → 防覆盖发布 → 注册数据集。
+| 项目 | 职责 | 典型扩展点 |
+|---|---|---|
+| [letools](https://github.com/XieWeikai/letools) | 统一数据模型、转换/规划、v2.1/v3.0后端、验证/比较/merge、工具集成 | DatasetSource、SourceProvider、内置backend、native粗粒度算子 |
+| [data-providers](https://github.com/XieWeikai/data-providers) | 独立打包的输入适配器；Tianji读取MCAP、检查、对齐、准备 | Python entry point，不修改LeTools核心 |
+| [letools-data-platform](https://github.com/XieWeikai/letools-data-platform) | 页面、路径选择、队列、进度、登记、Viewer/Doctor/Editor适配 | 参数模型、请求验证、worker、同源路由 |
 
-平台不要求用户登录或访问令牌，不创建登录会话 Cookie；旧 `/login` 跳转到首页。可连接到 Web 端口的用户均可使用工作台与 API，因此网络可达范围就是访问边界，只应向可信内网开放。同源检查不能替代网络访问控制。
+LeTools的**数据前端**是输入适配器，**数据后端**是目标格式写入器。这与浏览器前端/FastAPI服务器是两个不同层次。
 
-读取视频时不重新扫描全部 Parquet；登记数据集和 Doctor 前执行完整布局检查。实际文件路径再次验证，禁止越出数据集或允许根目录。路径策略不是针对同一 Unix 账号恶意并发修改符号链接的操作系统沙箱。
+```mermaid
+flowchart LR
+    raw["原始文件：MCAP / HDF5 / LeRobot / AgileX"] --> provider["SourceProvider：参数、配置、构造"]
+    plugin["独立Python包 entry point"] --> provider
+    provider --> source["DatasetSource：metadata / episodes / Arrow / media"]
+    source --> coordinator["LeTools coordinator + 可选静态planner"]
+    coordinator --> v21["内置v2.1 backend"]
+    coordinator --> v30["内置v3.0 backend"]
+    v21 --> output["标准LeRobot数据集"]
+    v30 --> output
+```
 
-Viewer 由平台管理，监听 loopback。浏览器经 `/viewer` 代理，文件与 Annotation 走同源接口，无需平台登录。服务端 Next.js 请求仍通过独立、带令牌的 loopback 数据桥访问本地数据；这个内部令牌不发送给浏览器，不因移除用户登录而取消。内部服务边界、路径与防覆盖校验保持不变。
+`SourceProvider`负责名字、别名、CLI参数、不可变配置和`open()`；`DatasetSource`负责读取，暴露`DatasetMetadata`、稳定顺序的`Episode`、`pyarrow.Table`及媒体。`VideoSlice`引用已编码片段，`FrameSequence`提供分批图像。后端不需要知道MCAP topic或原机器人时间戳如何解析；provider也不用实现两套LeRobot文件布局。
 
-## 模块
+插件安装到同一个Python环境，通过`letools.source_providers` entry point发现。输出后端目前内置；这个entry point不注册第三方writer。Provider被CLI发现后，仍需为Web实现选择/参数/worker适配，不能仅安装任意插件就声称网页全部支持。当前Tianji仅本地执行，拒绝分布式构造。
 
-| 要修改的功能 | 文件 |
-| --- | --- |
-| 路由、同源写入检查、provider 发现、录制列表 | `src/data_web_platform/app.py` |
-| 环境与隔离配置 | `config.py`、`scripts/install_isolation.py` |
-| 参数与拒绝不支持的选项 | `models.py` |
-| 文件路径边界、全新输出检查 | `paths.py` |
-| 任务持久化、排队、取消与进程清理 | `jobs.py` |
-| check → prepare → convert 生命周期 | `worker.py`、`publishing.py` |
-| 注册数据集、布局检查与指纹 | `datasets.py` |
-| 完整 Viewer 代理、标注、导出 | `viewer.py`、`setup_viewer.py`、`viewer_overlay/` |
-| Doctor 参数/报告/网页/副本操作 | `doctor.py`、`doctor_worker.py`、`doctor_compat.py`、`trim.py` |
-| 转换工作台界面 | `static/` |
-| 单元、真实视频与路由回归 | `tests/test_*.py` |
-| 真实服务器端到端验证 | `scripts/smoke_*.py`、`scripts/browser*_smoke.cjs` |
+## Web请求与进程
 
-表中 Python 模块与 static 目录均位于 `src/data_web_platform/`。
+```mermaid
+flowchart TD
+    ui["浏览器 HTML/CSS/JS"] --> api["FastAPI：路径、模型、注册表"]
+    api --> queue["JobManager：持久化单通道队列"]
+    queue --> convert["转换worker：check_prepare → convert → validate → publish"]
+    queue --> doctor["Doctor worker：报告或新副本"]
+    queue --> editor["Editor worker：plan / apply"]
+    convert --> datasets["服务器LeRobot数据集"]
+    doctor --> datasets
+    editor --> datasets
+    ui --> proxy["/viewer 同源代理"]
+    proxy --> next["固定上游Next.js Viewer，loopback"]
+    next --> bridge["带内部令牌的数据桥"]
+    bridge --> datasets
+    ui --> annotations["标注API：保存 / 新目录导出"]
+    annotations --> datasets
+```
 
-新增 provider 需先安装到所选 LeTools venv，确认 CLI 发现；再实现对应 Web 参数模型、原始记录选择和 worker 适配。不要让用户输入任意模块名、shell 命令或 Python 代码。未实现 Web 适配的 entry point 仅展示，不能提交任务。
+API进程不在请求线程里长时间编码。它先规范化路径和参数，持久化`request.json`，再由唯一队列线程以argv列表启动独立Python模块。所有转换、Doctor、Editor共用队列；每个worker拥有独立进程组。取消/关闭先结束整组，再回收PID，避免误杀重用的PID。
 
-## 约定
+客户端轮询JSON状态；worker通过标准输出的`DWP_EVENT` JSON行报告真实阶段、检查结果、验证与最终结果。普通日志按文本保存，网页用textContent显示。阶段完成不等于任务完成：最终结果、退出码和必要的输出校验共同决定终态。
 
-- Python snake_case；结构化边界用 Pydantic，业务错误保留可读原因。
-- 子进程通过 `DWP_EVENT` JSON 行发送真实阶段/报告；未知进度显示阶段而不是猜百分比。
-- 原始录制只读；转换、fix、trim、export 不覆盖既有目标。Annotation 保存是明确的元数据写操作。
-- 单元测试用 pytest / FastAPI TestClient；真实转换和浏览器测试另跑，避免常规测试依赖机器人或网络。
-- 仅更新自己的服务；不修改 LeTools 源码和子模块来解决 Web 适配问题。
-- 本仓库是新建项目，尚无历史 Git 提交约定；初始提交使用 `feat:` 描述交付功能。
+服务重启不会自动重放旧请求。任何未完成状态会标记`interrupted`，保留日志，交给操作者核对后重新提交。输出路径在队列中预留以减少竞争，最终发布仍需要独立的防覆盖检查。
 
-构建、运行与排障命令见 README。前端不依赖外部字体/CDN；Viewer 构建固定于 LeTools 所绑定的上游版本。
+## 严格转换的分工
+
+1. API确认provider确实在配置的解释器中可用、选择来自当前原始目录、目标尚不存在且不与输入嵌套。
+2. worker确认录制已保存，建立仅包含所选轨迹的目录链接，创建唯一TianjiConfig。
+3. provider的`check_and_prepare(..., prepare_valid_only=False)`共享读取和视频帧流，执行全部数值/时序/视频检查，写可复用缓存。任何选中项异常不写成功清单；中间文件保留供诊断。
+4. LeTools读取缓存，向私有暂存目标写出指定布局；已准备H.264不二次有损编码。
+5. worker对暂存结果做deep validation，随后通过Linux防覆盖原子rename发布。目标竞争、验证或源稳定性失败均不覆盖已有数据。
+
+独立“仅检查”仍调用check_dataset，不写缓存。普通provider CLI的check和prepare仍是两次调用；融合只是显式优化入口，不是隐式全局缓存。平台不开放valid-only选择策略。
+
+并发有不同层次：队列一次一个作业；Tianji当前自动最多12个录制worker；网页的data/video workers属于后续LeTools封装；Editor有自己的文件/codec并发。把它们混成一个“线程数”会误导调参。当前硬件加速仅编码；CUVID解码因损坏数据拒绝不等价未采用。
+
+## Viewer、Annotation和副本操作
+
+Viewer上游由LeTools固定提交，平台仅在`.state`生成副本里应用`viewer_overlay`。浏览器读取同源地址；Next.js服务端读取用loopback桥及内部令牌，令牌不进入浏览器bundle。视频Range请求只做必要的新鲜元数据/路径检查，不重新扫描每个Parquet。
+
+| 操作 | 写入策略 | 完成边界 |
+|---|---|---|
+| 原始转换 / Editor apply | 独占暂存目录 | 校验/源稳定后原子防覆盖发布 |
+| Doctor fix / trim | 独占新副本/新目标，带`.dwp-incomplete` | 上游操作、deep validation、源稳定后去掉标记；失败副本不可登记 |
+| Annotation save | 当前数据集`meta/lerobot_annotations.json` | 文件锁、固定路径/目录fd、原子替换；不重写视频/表格 |
+| Annotation export | 新暂存输出，物化语言列，视频复制/硬链接 | 防覆盖发布；不能把它说成转换worker的同一deep-validation流程 |
+| Registry register | `.state/datasets.json`中的引用与元数据 | 检查物理布局；不搬移、不上传、不等于训练质量通过 |
+
+Doctor的`observation.action`兼容视图为上游actions、per_episode、training、kinematics检查及score/gate提供只读alias，磁盘字段不变。其他检查使用原始dataset，保留嵌套wrench等所有观测；不修改检查阈值。Editor调用独立`letools-editor`，以原episode ID定义修改，要求已完成计划与当前参数/源指纹一致，并在执行时重做计划。它保持版本/FPS，不迁移自定义sidecar和原Annotation文件。
+
+Viewer构建在平台私有`.state`下。准备缓存时隔离Git父仓库发现，避免`git apply`在嵌套目录静默跳过LeTools补丁；同时验证可配置Doctor URL的实际源码锚点。旧缓存即使marker匹配但缺少锚点也会重建，仍缺失则失败。平台以`/doctor`作为本地诊断入口，不将local数据集发送到上游外部Space。
+
+## 持久数据
+
+```text
+.state/
+├── config/providers.toml       # 本服务的provider配置
+├── internal-token              # loopback桥接用，非用户登录令牌
+├── datasets.json               # 数据集路径注册表
+├── jobs/<id>/
+│   ├── request.json, status.json, worker.log
+│   ├── check.json, validation.json, editor-plan.json（按任务类型）
+│   └── selected/, cache/       # 原始转换的选择链接与准备产物
+├── viewer-upstream/            # LeTools提供的固定上游副本
+├── viewer-cache/source/        # 平台适配与Bun构建
+└── exports/                    # 未指定路径时的标注导出
+```
+
+任务结果可能还有私有暂存目录和失败诊断文件。路径/大小/mtime/ctime等指纹用于发现正常修改，不是内容哈希或同一Unix账号恶意竞争下的操作系统沙箱。允许目录与注册数据集边界限制可访问路径；服务无用户登录，网络可达范围仍是重要边界。
+
+## 代码导航
+
+| 文件（src/data_web_platform下，另标除外） | 维护职责 |
+|---|---|
+| `app.py`、`models.py` | 生命周期、provider发现、原始选择、HTTP与参数边界 |
+| `config.py` | 环境解析、私有状态、子进程隔离 |
+| `paths.py`、`publishing.py` | canonical path、输入输出分离、原子防覆盖 |
+| `jobs.py` | 队列、持久化、DWP_EVENT、取消和进程所有权 |
+| `worker.py` | Tianji融合严格检查、LeTools转换与发布 |
+| `datasets.py` | 注册、布局、稳定ID与元数据指纹 |
+| `viewer.py` | Viewer进程/代理、数据桥、Range、Annotation及导出 |
+| `doctor.py`、`doctor_worker.py` | Doctor选项、报告和只修改副本的任务 |
+| `doctor_compat.py`、`trim.py` | action只读alias及同步裁剪适配 |
+| `editor.py`、`editor_worker.py` | 受限编辑请求、匹配计划、执行/验证/发布 |
+| `static/` | 转换工作台、数据集列表、Editor表单与状态展示 |
+| 根目录`setup_viewer.py`、`viewer_overlay/` | 固定锚点适配、前端loader与构建，不改上游源码 |
+| `scripts/`、`deploy/` | 安装隔离、服务、只读preflight、版本与测试入口 |
+| `tests/` | API/路径/取消/发布、真实视频编辑与Viewer适配回归 |
+
+新增输入格式先实现/安装独立provider，再补Web参数和选择适配。扩展输出格式应在LeTools实现backend，而不是在本平台写另一套文件规则。关于核心planner、Rust边界、merge和distributed的职责，见[LeTools架构](https://github.com/XieWeikai/letools/blob/main/docs/ARCHITECTURE.md)。

@@ -1,78 +1,56 @@
-# 部署验收记录
+# 验证记录：平台 0.2.0
 
-验收日期：2026-09-29；主机：Marvin Thor / Linux aarch64。
+核验日期：2026-10-12。此页记录本次源码整理与发布验收；[2026-09-29 的历史记录](history/verification-20260929.md)单独保留，不代表当前登录方式、provider版本或转换阶段。
 
-源码版本与 Python 依赖版本分别记录于 `deploy/sources.json`、`deploy/python-constraints.txt`。本次仅写入迁移后的独立环境和本项目，不改全局 LeTools。
+## 干净安装与自动回归
 
-## 自动化回归
+在 Marvin Ubuntu 24.04.3 / aarch64 上新建 Python 3.12.3 venv，按部署清单安装平台、LeTools、Tianji provider和Editor；未复用生产venv的site-packages。固定源码见`deploy/sources.json`，Python依赖约束见`deploy/python-constraints.txt`。
 
-- Web 平台全套：**134 passed**，包括认证、路径边界、队列与取消、原子防覆盖发布、Viewer/标注、Doctor、动作字段兼容与状态目录权限。
-- LeTools 相关回归：**49 passed**，覆盖 roundtrip、video、video options、external source providers、Doctor、Visualizer。
-- Viewer 适配层前端逻辑与真实上游 loader 集成：**19 passed**；Next production build、独立 TypeScript typecheck 成功。
-- Python 测试有一条 Starlette 对 httpx TestClient 的弃用提示，不影响本次运行；后续升级依赖时需跟进测试客户端迁移。
+| 验证 | 结果与范围 |
+|---|---|
+| 环境预检 | `scripts/check_environment.py --strict`通过；模块来自专用环境，provider0.6.2、Editor0.1.0可用 |
+| Python完整回归 | 196 passed，9.04秒；1条既有Starlette/httpx弃用警告 |
+| Bun适配测试 | 19 passed、54 assertions；Doctor修复后又在新构建副本上运行6项实际上游loader集成测试，全部通过 |
+| Viewer安装与构建 | Bun1.4.2，frozen lockfile安装与Next.js production build成功；无Google字体下载依赖 |
+| 嵌套Git缓存 | 真实`git apply`回归确认仅改缓存、不改父仓库；旧伪成功marker被发现并强制修复；仍缺本地Doctor锚点会拒绝构建 |
+| Doctor多频率字段 | v2.1/v3.0含`wrench_windows[4,12]`完整12项检查；action别名不覆盖既有字段，NaN与缺失命令仍失败 |
 
-## 实际转换
+Python覆盖路径边界、请求模型、队列、取消/重启、源变化、无登录与同源约束、严格融合转换、原子发布、Annotation保存/导出、Doctor只读兼容与副本处理、Editor计划/执行及真实视频变换。测试通过不替代下列真实录制验收。
 
-通过认证后的 Web API 调用真实 Tianji provider / LeTools，不使用转换 mock。
+## 真实原始数据与两个目标版本
 
-| 测试 | 结果 |
-| --- | --- |
-| 已知 100.85 ms 反馈缺口的录制 | 严格检查失败，未 prepare / 转换、未删除或拆分原始录制 |
-| 正常录制 → v2.1 | 成功；1 episode / 988 帧 / 50 FPS；包含深度验证，总耗时 108.67 秒 |
-| 同一正常录制 → v3.0 | 成功；1 episode / 988 帧 / 50 FPS；包含深度验证，总耗时 84.09 秒 |
-| 加入最终原子防覆盖发布后重测 v3.0 | 成功；总耗时 83.68 秒 |
+隔离验收状态目录为`/home/user/projects/data-web-platform/.state/publication-20261012-US9tLD`。该目录是部署过程的证据，**不是仓库运行依赖**；新部署按手册生成自己的状态和样本。
 
-测试 task 为 `Plug in the Ethernet cable`。四路输出保持 960×540，H.264、CRF 18。以上是单条短录制的实测，不是整批吞吐保证。
+原始目录：`/home/user/data_recorded/pick_and_place`，只读选取：
 
-服务器证据：
+- `my_bag-26-10-09-16-24-47-3f581ff0`
+- `my_bag-26-10-10-11-32-06-8eed0a15`
 
-- `.state/verification-20260929-113537/summary.json`
-- `.state/verification-20260929-121215/summary.json`
+| 操作 | 真实结果 |
+|---|---|
+| 仅检查两条 | 2/2通过，输出诊断报告 |
+| 转v2.1 | 新目录`state/demo-v21`；2条、1,419帧、50FPS、四路H.264、wrench窗口[4,12] |
+| 转v3.0 | 新目录`state/demo-v30`；同样2条、1,419帧和字段；分片格式 |
+| 混入坏录制 | 加入`my_bag-26-10-10-11-04-30-e8d4323f`后，1/2异常，停在check_prepare；无成功manifest、无最终目标 |
+| Doctor | 两种格式均完整返回12项：8 PASS / 4 WARN / 0 FAIL；两条score正常，ACT gate通过；源指纹不变 |
 
-## 浏览器
+WARN包含常值夹爪/动作维度、无聚合`stats.json`等原生诊断。v2.1可有逐episode统计，Doctor关于聚合统计的警告不等同于所有统计丢失。没有适用URDF时kinematics返回跳过说明；不声称做过真实机器人运动学验证。
 
-真实 Chromium / Playwright，通过 SSH 隧道访问部署服务：
+## 浏览器与编辑回读
 
-- 目录选择、轨迹全选/全不选/单选、桌面及 375px 窄屏布局。
-- 1 个 v2.1、2 个 v3.0 数据集的四路视频播放时间推进、解码帧增加、回到开头及中段 seek。
-- Annotation 新增、界面保存、API 回读、刷新回读；测试后恢复原始 atoms 并核对。
-- 三份标注导出均包含 988 帧，逐行检查 Parquet 均含测试标注；重复目标拒绝覆盖。
-- Viewer 和平台 Doctor 入口可用。
-- 补测 v2.1 / v3.0 的 Statistics、Filtering、Frames、Action Insights：元信息与四路相机尺寸匹配；16 维真实动作有有限的速度分布和自相关曲线；Frames 首尾跳转确实推进视频解码。单样例不足两条 episode 时，跨轨迹方差按上游规则提示样本不足，不伪造统计。
-- 本地 v3 使用真实 episode 分片清单，不试探缺失文件；Tianji 原始 `observation.action` 被 Viewer 正确识别，磁盘字段和值不变。
-- 界面发起严格异常检查，最终展示左右夹爪反馈约 100.85 ms 的缺口、各 5 个受影响帧，以及独立的命令暂停补齐信息；补测复用该任务，没有重复转换或删除原始录制。
-- 两份完整浏览器验收脚本退出码 0，page errors / console errors / HTTP failures 均为 0。
+用实际浏览器访问隔离API18096（SSH本地转发18796）与Viewer13011，保存真实截图供使用手册。截图中的测试目录、样本任务和端口用于演示，生产入口仍是8095。
 
-注意：原版播放器采用约 0.2 秒同步容差，验收不声称拖动条提供逐帧精确 seek。测试脚本为 `scripts/browser_smoke.cjs`、`scripts/browser_features_smoke.cjs`。
+- 工作台：服务器目录选择、125条录制列表、过滤/勾选、参数、异常展开、真实四阶段进度和JSON报告。
+- 数据集：v2.1/v3.0登记卡片、Viewer/Doctor/Editor入口。
+- Viewer：四路视频解码和播放、Statistics、Filtering、Frames、Action Insights。Doctor iframe实际地址为本地`/doctor/?dataset=...`，不使用外部HF Space。
+- Annotation：在示例episode0添加并保存`DEMO: Grasp the green block`；API重新读取成功，`/api/export`生成独立新目录并核对语言列，原数据集指纹不变。保存前的首次DEMO写入是有意的标注元数据变更。
+- Editor：实际点击预览和执行，将2条输入保留1条659帧，修改task，只将head_left转为480×270、H.264 CRF18；其他三相机保持960×540。四视频全部解码659帧，state/action/eef/wrench_windows/timestamp与对应原episode逐值相同。
+- Editor不会复制已有Annotation sidecar；本次确认源标注仍在、输出不含该sidecar。预览0.8秒、执行3.3秒是此小样本的测量，不是通用性能承诺。
 
-最终浏览器报告与截图已归档到服务器 `.state/browser-verification-20260929-HB642n/`，其中主流程为 `summary.json`，补测为 `features/summary.json`。包含数据内容，目录保持私有且不提交 Git。
+独立结果保存在验收目录的`fixtures.json`、`doctor-real-validation.json`、`editor-annotation-validation.json`及各job报告中。未经授权没有测试真实Hub上传或控制机器人。
 
-## Doctor
+## 性能与适用范围
 
-通过认证 TestClient 和真实 JobManager 子进程执行 15 个作业，覆盖两种格式的 check、score、gate、merge-check（含 post-merge）、fix、trim、trim dry-run。
+Provider0.6.2的完整125条严格检查、转换114条通过项为269.509秒；对照0.6.1为572.020秒。该验收使用CLI/API显式valid-only选择策略，网页仍是全部选中项必须通过。视频体积约3.88倍、采样峰值RSS约8.13GB；未采用CUVID硬解。详见[第二阶段实验](https://github.com/XieWeikai/data-providers/blob/main/tianji_provider/docs/PERFORMANCE_ROUND2.md)。
 
-- 4 个新输出深度验证及自动登记成功。
-- 4 路视频逐帧解码核验：960×540、988 帧、50 FPS，PTS / 帧数 / 元数据一致。
-- 私有输入快照全部文件 SHA-256 及目录指纹前后相同。
-- 拒绝覆盖、嵌套输出及缺少明确确认的修改操作。
-- 修复实测约 0.94 / 0.97 秒；同步裁剪含重编码、验证约 124.34 / 125.04 秒。
-- 原样本已经裁过静止首尾，因此保留全部 988 帧；实际删去首尾、删除静止 episode、v3 共用视频分片及 B 帧精确切片另有视频回归 fixture，覆盖 72 → 20 帧的情况。
-
-服务器证据：`.state/doctor-verification-20260929-122128-vi6rtq2p/summary.json`。可用 `scripts/smoke_doctor.py` 复跑，每次使用独立快照与新目标。
-
-数据质量的 FAIL / WARN 与作业崩溃不同；没有 URDF 时运动学检查按上游规则跳过。首次并行测试曾在标注元数据变化时正确拒绝发布 trim 输出，未完成标记仍保留；后续验收使用私有输入快照避免相互影响。
-
-随后补充并验收了 Tianji `observation.action` 的只读兼容层：上游 Training Readiness / score / gate 得到明确标注的 `action` 视图，原字段和值保持不变。两种版本的 check / score / gate 共 6 个真实作业通过；12 项检查均为 **8 PASS / 4 WARN / 0 FAIL**，动作评分均为 **59.540984**，ACT gate 无 blocker。缺全局统计、样本量不足、夹爪零标准差或可能 clipping 等真实警告仍保留，没有调低阈值。源文件全量 SHA-256 前后相同。
-
-兼容复测证据：`.state/doctor-verification-20260929-124504-rv3hnt0w/summary.json`。
-
-## 隔离与安全边界
-
-- 全局 LeTools 启动器、旧 LeTools 环境启动器、全局 provider 配置及 `.bashrc` / `.profile` / `.zshrc` 的 SHA-256 与部署前一致。
-- 新服务端口 8095；私有 Viewer 仅监听 127.0.0.1:3010。原有服务端口未改动。
-- 最终候选于 2026-09-29 13:14:24 CST 启动，Viewer 适配指纹 `ab5a44dd54bbc22425d6278d63c3e129efee904a3e03bbfb0f9a575df61d7179`；先前缓存另行保留用于回退，旧共享服务未重启。
-- 新目标碰撞、目录白名单、源/输出嵌套、异常中断、进程组取消、未完成输出拒绝登记均有回归覆盖。
-- 标注写入拒绝 `meta` 或标注文件的符号链接；使用固定文件名和目录 fd 原子写，链接竞争不会使 `info.json` 被替换。标注导出与转换共用 Linux 原子防覆盖发布，空目录、非空目录、文件、符号链接竞争均拒绝覆盖。
-- 本项目 `.state` 及直接管理的状态子目录权限为 `700`，token 与私有 provider 配置为 `600`；初始化也会收紧部署工具提前创建的目录，不递归改变用户数据权限。
-- Hub 上传入口保留，但未向 Hugging Face 创建仓库或上传数据；需要用户明确提供认证及目标。
-- 本次测试不等于任意数据、任意格式组合绝无缺陷。部署默认严格拒绝未知或不支持的输入，不用补帧、拆轨迹或静默跳过来让检查通过。
+本次人工浏览覆盖上述路径；不承诺任意上游更新、所有浏览器、所有数据集或硬件组合。Hub上传只覆盖隔离mock边界；推送需要用户提供有效权限与明确目标。可复现自动测试和后续接入要求见[开发指南](development.md)。

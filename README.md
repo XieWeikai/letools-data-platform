@@ -1,141 +1,81 @@
-# Data Web Platform
+# LeTools Data Platform
 
-Marvin 上独立部署的 LeTools / Tianji 数据工作台。提供录制目录选择、轨迹多选、严格检查、prepare、LeRobot v2.1 / v3.0 转换，以及原版 Visualizer、Annotation 与 Doctor 的 Web 接入。
+为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-## 当前部署
+**当前平台版本：0.2.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+
+| 文档 | 读者要完成的任务 |
+|---|---|
+| [部署与运维](docs/deployment.md) | 首次安装、固定源码、隔离环境、Viewer 构建、systemd、升级与恢复 |
+| [使用手册](docs/usage.md) | 目录/轨迹选择、参数、检查转换、Viewer/Annotation、Doctor、Editor |
+| [架构与代码导航](docs/architecture.md) | 三个项目的分工、数据前后端与 Web 前后端、模块和事件协议 |
+| [API 说明](docs/api.md) | 请求结构、生命周期、错误、只读操作与写入边界 |
+| [开发与测试](docs/development.md) | 代码注释约定、测试层次、增加 provider、仓库维护 |
+| [验收记录](docs/verification.md) | 当前版本验证与明确标记的历史测量 |
+
+相关代码：[LeTools](https://github.com/XieWeikai/letools) · [独立 providers](https://github.com/XieWeikai/data-providers) · [本平台](https://github.com/XieWeikai/letools-data-platform)。私有仓库需要 GitHub 访问权限；平台网页可访问不代表同时拥有仓库权限。
+
+## 已有 Marvin 部署
 
 | 内容 | 位置 |
-| --- | --- |
-| LeTools 源码 | `/home/user/projects/letools-tianji` |
-| 独立 Python 环境 | `/home/user/projects/letools-tianji/.venv` |
-| Tianji provider 源码 | `/home/user/projects/data-providers/tianji_provider` |
-| 本项目 | `/home/user/projects/data-web-platform` |
-| Web | `http://marvin-thor.local:8095`，或使用能访问 Marvin 的 IP |
-| 内部 Visualizer | `127.0.0.1:3010`，由本服务管理，通过 `/viewer/` 访问 |
-| 状态、报告、构建缓存 | 本项目 `.state/`，不提交 Git |
+|---|---|
+| 平台源码 | `/home/user/projects/data-web-platform` |
+| LeTools 源码及专用环境 | `/home/user/projects/letools-tianji`、其 `.venv` |
+| Provider 仓库 | `/home/user/projects/data-providers` |
+| 页面 | `http://marvin-thor.local:8095/`，或服务器可达 IP 的 8095 端口 |
+| 内部 Viewer | loopback `127.0.0.1:3010`，浏览器通过 `/viewer/` 访问 |
+| 状态、任务日志、准备缓存 | 平台 `.state/`，不提交 Git |
 
-不修改全局 `~/.local/bin/letools`、原 `~/projects/letools` 或全局 `~/.config/letools/providers.toml`。这三项不是本服务的依赖。本服务使用用户级 systemd，不需要 sudo。
+浏览器不需要登录令牌；旧 `/login` 自动回首页。此部署使用服务账号的文件权限，适用于可信内网或 Tailscale，不是公网多用户权限系统。内部 Viewer 数据桥仍有独立令牌，用户无需读取或填写它。
 
-### 直接打开工作台
+公司外可先建立 SSH 隧道：
 
-直接访问 `http://marvin-thor.local:8095`，也可使用 `http://<Marvin 的可达 IP>:8095`。`marvin` 是 SSH 配置别名，不一定是浏览器可以解析的主机名。**无需登录或访问令牌**，工作台、公开 API、Visualizer、Annotation 和 Doctor 均可直接使用。旧 `/login` 地址自动跳转到首页，不再创建平台登录会话 Cookie。
-
-任何能连接到 8095 端口的人都能使用这些功能，因此仅在可信内网开放，不要直接暴露到公网。HTTP 不加密；远程访问可使用 SSH 隧道，但隧道本身不会关闭服务器的内网监听，仍需通过网络边界或防火墙限制不可信访问：
-
-```sh
-ssh -N -L 18095:127.0.0.1:8095 marvin
-# 浏览器打开 http://127.0.0.1:18095
+```bash
+ssh -N -L 18095:127.0.0.1:8095 marvin-tailscale
+# 浏览器打开 http://127.0.0.1:18095/
 ```
 
-本服务不是多用户权限系统，使用服务的 `user` 账号权限读写允许目录。默认可浏览 `/home/user` 与 `/media/user/BAG_STORAGE`；可通过 `DWP_ALLOWED_ROOTS` 缩小范围。同源写入检查、路径边界、禁止覆盖、Doctor 副本操作等保护仍保留。服务端 Next.js 与 loopback 数据桥之间的内部令牌仍保留，它不是用户登录令牌，不需要用户读取或输入。
+`marvin` / `marvin-tailscale` 是 SSH 别名，不一定能直接作为浏览器主机名。首次部署请按 [部署指南](docs/deployment.md)，不要对现用环境重复执行创建 venv 的步骤。
 
-## 使用流程
+## 最短使用流程
 
-1. 在转换页选择 provider。列表来自配置的 LeTools 环境，Tianji 是当前实现了 Web 参数适配的原始数采 provider。LeTools 的内置 provider 也会显示，未适配者不可选，不会被冒充为已支持。
-2. 点击目录选择，浏览 **Marvin 服务器文件系统**。选择录制总目录，或一条录制目录；列表支持全选、全不选、单独勾选、筛选和分页。不完整但可识别的录制同样列出，交由检查说明异常。
-3. 设置 task（必填）、FPS（默认 50）、输出 v2.1 / v3.0 和全新目标目录。当前默认 task 是 `Plug in the Ethernet cable`。高级设置包括观察/命令间隔阈值、重采样方式、首尾静止裁剪和并发数。
-4. 可先点“检查”；正式转换仍重新执行 **check → prepare → convert → deep validation → publish**，避免沿用过期检查。检查逐条显示真实问题；prepare 显示编码进度，无法精确测量的阶段不伪造百分比。
-5. 检查通过且输出验证通过后自动登记数据集。在数据集面板打开 Visualizer、Annotation 或 Doctor；也可以登记已有 v2.1 / v3.0 数据集。
+1. 在工作台选择 `tianji`，点击“选择目录”，选择**服务器上的原始录制目录**并加载。
+2. 全选、清空或手动勾选轨迹。可先运行“仅检查所选轨迹”，查看每条的错误与处理说明。
+3. 填写任务指令、FPS、目标 v2.1/v3.0 和一个尚不存在的输出目录，再点“检查并转换”。
+4. 当前转换依次显示“检查与准备 → 生成数据集 → 验证输出 → 发布输出”。任一选中轨迹异常则整批停止；不会静默只转换通过项。
+5. 输出成功后自动登记到“数据集”。从卡片进入可视化与标注、Doctor 或编辑器；已有 LeRobot 数据集也可手动登记。
 
-### Tianji 对齐规则
+原始 MCAP 不会被修改、删除或拆轨迹。转换、标注导出、Doctor fix/trim、Editor 都要求新输出；**Annotation 的保存会有意写入当前数据集的标注元数据**，这是与只读浏览不同的操作。
 
-转换调用安装的 `tianji_provider`，不在 Web 层重新实现信号对齐：使用共同有效时间范围、配置的目标时间网格、provider 的状态/视频采样与命令停发补齐规则；首尾静止裁剪可开关。观察信号的真实缺失仍严格报错，控制命令暂停不等于观察缺失。
+## 功能范围
 
-不会自动删除异常录制、不会把一条录制拆成多条、不会为通过检查而擅自放宽阈值。遇到异常应阅读报告后取消选择该轨迹；只有用户显式调整设置才改变规则。原始数据应停止录制并保存完成；检查和准备前后会核对源文件是否变化。
+| 功能 | 当前支持 | 主要边界 |
+|---|---|---|
+| Provider 发现 | 来自配置的 LeTools Python 环境 | 发现插件不等于已适配网页；原始数采转换目前只支持 Tianji |
+| 原始数据选择 | 服务器目录浏览、筛选、分页、全选/清空/多选 | 选择原始录制，不能把 prepare 缓存或最终数据集当作原始目录 |
+| 检查与转换 | 完整检查、融合准备、v2.1/v3.0、报告、取消、历史 | 任一异常整批拒绝；重启标记 interrupted，不自动重试 |
+| Tianji 数据 | 主 FPS 默认 50，力窗口默认 200 Hz，命令缺失补同帧 state | 网页未单独开放 wrench_fps/编码器/Provider workers；详情见参数表 |
+| 视频 | 原尺寸、高画质 H.264；可用时 NVENC，否则 x264 | 软件解码保持原严格检查；不同编码器的 CQ/CRF 不能按数字等价 |
+| Viewer | 四路视频、信号图、Statistics、Filtering、Frames、Action Insights | 播放器 seek 有容差，不是逐帧编辑器；部分分析依赖足够的 episode |
+| Annotation | 语言 atoms 的保存、读取、时间戳及新目录导出 | 保存写当前数据集标注；Hub 上传是另一个显式操作 |
+| Doctor | check、score、gate、merge-check、fix、trim | WARN/FAIL 可是数据结果；fix/trim 只操作新副本 |
+| Editor | task、轨迹/字段移除、选定相机转码/缩放、预览计划 | 保持格式/FPS；先计划再执行；原有标注/自定义附属文件不迁移 |
+| LeTools 其他功能 | CLI/API 的转换、plan、merge、compare、分布式等继续可用 | 当前工作台没有包办所有 CLI 命令；Tianji provider 不支持分布式 |
 
-视频保持 provider 的原分辨率与 H.264 高画质编码策略；LeTools 后端复用已准备的视频，不因进入 Web 流程额外降低分辨率。输出只允许新目录：转换先写私有暂存目录，深度验证后通过 Linux 原子防覆盖操作发布。失败或目标被其他人抢先创建时，不会覆盖目标，未发布输出保留用于排查。
+## 性能与质量
 
-如果已完成发布、但随后写报告或同步磁盘失败，任务仍可能显示失败，而完整目标已经存在。此时先核对目标和报告，可在数据集面板手动登记并运行 Doctor；不要删除目标后直接重试。重新转换请选择另一个新目录。
+2026-10-12 在 Marvin Thor 对固定 125 条录制完整检查，转换 114 条通过项、单独报告 11 条异常：82,628 行、456 段视频，流程从 572.020 秒降到 **269.509 秒（4 分 29.5 秒）**。这是该批数据和硬件的实测，不能保证所有数据同样耗时。
 
-### Visualizer、Annotation、Doctor
+采用软件 H.264 解码、NVENC CQ16 编码及融合检查准备。数值、时间审计和统计与旧版相同，完整视频时序与画质抽检通过。代价是该批视频约 **3.88 倍体积**、进程树采样峰值约 **8.13 GB**。原软件 CRF18 编码可在 provider CLI/API 显式选择；网页目前使用 auto。完整实验见 [provider 性能记录](https://github.com/XieWeikai/data-providers/blob/main/tianji_provider/docs/PERFORMANCE_ROUND2.md)。
 
-- Visualizer 使用该 LeTools 版本绑定的完整上游 Next.js 界面，不是截图或替代播放器。页面位于 `/viewer/`，视频支持 Range/seek；浏览器与内部服务通过同源桥接读取已登记数据。
-- Annotation 可按 episode 编辑、保存、读取时间戳和导出。**保存标注会写入所选数据集的标注元数据**；不会重写原 MP4 / Parquet。导出要求独立新目录。
-- Doctor 支持 `check`、`score`、`gate`、`merge-check`、`fix`、`trim`，包括选择检查项、质量门槛、URDF 路径及详细报告。FAIL/WARN 是数据质量结果，不等同于服务器故障。
-- Tianji 的动作字段保留为 `observation.action`。Web 层为上游 Doctor 的 Training Readiness / score / gate 提供只读 `action` 别名视图，并在报告里说明；不重命名数据、不修改原始值、不调低质量阈值，也不隐藏真实 WARN / FAIL。
-- `fix` 只修改新建独立副本，不原地修复；`trim` 同步重建表格、索引、统计与视频，只写新输出。两者需要确认。原版 Doctor 的表格-only 裁剪不适用于同步训练数据，因此由本项目同步裁剪适配器替代。
-- Doctor trim 依据 state/action 活动阈值裁去首尾，低活动轨迹默认丢弃（`keep_static` 可保留），不切成多个 episode；全部被丢弃则报错。此操作与 Tianji prepare 的首尾裁剪是两套明确的用户操作。
-- Doctor trim 支持正整数 FPS、标准单流 MP4、偶数宽高 RGB 视频；缺帧/非连续时间轴/不支持格式会拒绝，不擅自补帧或缩放。dry-run 不创建输出，也不声称已验证视频。
-- 上游 Hub 相关入口保留，但上传需显式配置认证和全新的远端仓库。部署验收不向 Hugging Face 创建或上传数据。
+## 常用运维
 
-### 数据集编辑器（LeTools editor）
-
-在“数据集”卡片点击“编辑数据集”，或打开 `/editor`。先加载已登记的 v2.1 / v3.0 数据集，可按原始 episode ID 单条修改 task，也可多选批量改 task、从输出移除轨迹，或合并粘贴的 JSON 任务映射。移除字段支持数值、嵌入图像及视频相机；五个系统时间/索引字段不可移除。
-
-视频处理默认关闭以尽量复用原编码。开启后可选择全部或指定保留相机，使用 H.264 / MJPEG，设置精确宽高、像素格式、CRF/preset 或 quality。精确缩放可能改变长宽比。高级资源支持自动规划或显式 workers / codec threads，以及 Parquet batch rows。Web 只使用服务器 `/usr/bin/ffmpeg`，不接收任意可执行路径。
-
-先“预览编辑计划”，查看输出轨迹/帧数、文件复用/重写/转码数量和上游警告；计划是队列中的只读任务，不生成数据集。参数或源数据改变后必须重新预览。然后执行到全新的输出目录，后台重新计划、编辑、deep validation、源数据稳定性检查及原子防覆盖发布；成功后自动登记，可打开 Viewer 或继续编辑。
-
-编辑保持源 LeRobot 版本、FPS 和保留 episode 的长度；不提供原地覆盖、改 FPS 或任意帧裁剪。源数据与原始录制不变。上游不会复制自定义根/附属文件，已有 Annotation 标注也不迁移；它们保留在源数据集。删除 v3 中间 episode 可能需要视频重封装，无法证明 H.264 安全切包时会回退到转码，计划会提示。编辑任务共用单通道队列、取消、历史日志和报告；上游没有逐帧进度回调，因此执行时显示阶段与耗时，不虚构百分比。
-
-源/输出路径沿用平台白名单，输出必须与源完全分离。为避免误读外部资源，当前 Editor 入口拒绝包含符号链接的数据集。强制取消可能留下私有暂存/上游锁文件，它们不会发布或自动登记，可保留排查。
-
-安装在同一个专用 venv（已有 Rust >=1.88 和平台 linker 时）：
-
-```sh
-~/.local/bin/uv pip install --python ~/projects/letools-tianji/.venv/bin/python \
-  -e ~/projects/letools-tianji/packages/letools-editor
-~/projects/letools-tianji/.venv/bin/letools editor --help
-```
-
-仅安装 editor 插件，不使用 `uv tool install --force`，不修改全局 LeTools。Rust 未安装时可将工具链放到本项目 `.state/editor-toolchain`，安装时显式设置 CARGO_HOME/RUSTUP_HOME/PATH，不改用户启动脚本。不要执行会移除可选包的 base-only `uv sync`。测试覆盖新输出保护、计划失效、两种版本、task/episode/feature 组合编辑、H.264/MJPEG 缩放和统计重算。
-
-## 环境与维护
-
-命令行使用本环境，不改变别人用的全局命令：
-
-```sh
-source ~/projects/letools-tianji/.venv/bin/activate
-letools providers list
-letools --help
-# 或直接调用，不 activate：
+```bash
 ~/projects/letools-tianji/.venv/bin/letools providers list
-```
-
-`.venv` 内的 `.pth` 只为本环境设置独立 provider 配置默认值；Web 服务另外指定自己的 `.state/config/providers.toml`。切勿把旧全局配置里的 provider 源码路径复制进来。
-
-```sh
+curl -fsS http://127.0.0.1:8095/health
+curl -fsS http://127.0.0.1:8095/api/environment
 systemctl --user status data-web-platform.service
 journalctl --user -u data-web-platform.service -n 100 --no-pager
-systemctl --user restart data-web-platform.service
 ```
 
-重启会中断正在进行的转换，历史状态会标记为 interrupted，不会自动重试或覆盖输出。先在页面确认没有运行任务再重启。默认一次运行一个任务，内部并发可设置，以减少与机器人和其他服务争用资源。取消会终止该任务的进程组，保留诊断信息。
-
-### 在相同目录结构重装
-
-先准备 `deploy/sources.json` 指定的三个源码版本及 LeTools 子模块。所有 Python 包仅进入目标 venv：
-
-```sh
-cd ~/projects/data-web-platform
-~/.local/bin/uv venv --python python3.12 ~/projects/letools-tianji/.venv
-~/.local/bin/uv pip install --python ~/projects/letools-tianji/.venv/bin/python \
-  --index https://xieweikai.github.io/letools/simple --index https://pypi.org/simple \
-  --index-strategy unsafe-best-match -c deploy/python-constraints.txt \
-  -e ~/projects/letools-tianji -e ~/projects/data-providers/tianji_provider -e . pytest
-~/projects/letools-tianji/.venv/bin/python scripts/install_isolation.py
-~/projects/letools-tianji/.venv/bin/python setup_viewer.py
-~/projects/letools-tianji/.venv/bin/python scripts/install_service.py
-```
-
-以上创建 venv 的步骤用于首次安装，不应对使用中的环境直接执行。已有环境更新使用 `uv pip install`，先跑测试，再于任务空闲时重启服务。`setup_viewer.py` 需要 Bun（默认 `~/.bun/bin/bun`）；只在 `.state` 中复制、适配、构建 Viewer，不改 LeTools 子模块源码。安装脚本在源码或适配层指纹变化时会更新缓存，`--force` 可强制重建；正常启动服务不会自动构建。重建会替换本项目的生成缓存，应先停掉本服务并自行保留缓存备份，或在独立 `DWP_STATE_DIR` 中构建、验收后切换。不要在 Viewer 正运行时直接重建同一缓存。
-
-配置由 `DWP_PROJECT_ROOT`、`DWP_LETOOLS_ROOT`、`DWP_STATE_DIR`、`DWP_PYTHON`、`DWP_BUN`、`DWP_HOST`、`DWP_PORT`、`DWP_VIEWER_PORT`、`DWP_ALLOWED_ROOTS` 和 `DWP_DEFAULT_SOURCE` 控制；允许目录用冒号分隔。修改 systemd Environment 后需要 daemon-reload 和重启。
-
-`.state` 可能包含大型 prepare 缓存、测试输出、源路径、日志与内部服务凭证，不应公开或提交。旧部署遗留的 `access-token` 文件不再用于登录；新启动不生成或读取此用户令牌。BAG_STORAGE 空间有限，默认输出建议放系统磁盘的 `~/datasets`。没有自动删除历史数据的任务。
-
-## 测试与结构
-
-```sh
-cd ~/projects/data-web-platform
-~/projects/letools-tianji/.venv/bin/python -m pytest -q
-# Viewer 构建完成后运行适配层与真实上游 loader 集成测试：
-DWP_VIEWER_SOURCE="$PWD/.state/viewer-cache/source" \
-  ~/.bun/bin/bun test viewer_overlay/ tests/viewer-fetch-integration.test.ts
-# 真实录制端到端验收，会生成独立测试输出：
-~/projects/letools-tianji/.venv/bin/python scripts/smoke_pipeline.py
-```
-
-`scripts/browser_smoke.cjs` 使用 Playwright 测试实际页面；`scripts/browser_features_smoke.cjs` 另外验证 Statistics、Filtering、Frames、Action Insights 和逐条异常报告。两者需要运行服务、可达 origin 和测试数据，默认通过本地 SSH 隧道访问 Marvin；均以无登录 Cookie 的新上下文检查直接访问，不读取访问令牌。主浏览器脚本仍通过 SSH 只读核验导出文件。补测脚本可通过 `DWP_EXISTING_CHECK_JOB=<id>` 复用已有检查报告，避免重复读取原始录制。
-
-架构、入口与扩展位置见 `docs/architecture.md`；实际样本、浏览器与隔离验收记录见 `docs/verification.md`。测试数据、浏览器截图和报告位于 `.state/`，不含在 Git 提交中。
+不要修改全局 `~/.local/bin/letools`、旧 `~/projects/letools` 或全局 provider 配置。重启、重建 Viewer 或更新运行代码前先确认队列空闲。仓库不包含原始录制、转换数据、令牌、venv、生成的 Viewer、运行日志或截图数据；详细备份与恢复规则见部署指南。
