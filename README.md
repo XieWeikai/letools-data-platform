@@ -2,7 +2,9 @@
 
 为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-**当前平台版本：0.4.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+**当前平台版本：0.4.1；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.3、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+
+0.4.1 配合 provider 的四路 NVENC 探测及运行时回退：auto 遇到硬件 codec 故障时整批重试软件 H.264 一次，保留失败诊断且不混用配方。检查进度可重新开始，列表按索引替换，不重复计算录制。显式硬件请求、磁盘/源文件错误和软件重试失败仍停止；严格检查和原始数据不变。
 
 | 文档 | 读者要完成的任务 |
 |---|---|

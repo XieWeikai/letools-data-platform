@@ -1,13 +1,13 @@
 # 部署与运维
 
-适用于平台 0.4.0、Tianji provider 0.6.2，核验日期 2026-10-12。生产验收环境是 Ubuntu 24.04.3 / Linux aarch64、Python 3.12.3、Bun 1.4.2、系统 FFmpeg 6.1.1。部署使用一个专用 Python venv，不替换任何全局工具。Linux 原子防覆盖发布是生产依赖，macOS/Windows 不是本指南承诺的服务器部署平台。
+适用于平台 0.4.1、Tianji provider 0.6.3，核验日期 2026-10-12。生产验收环境是 Ubuntu 24.04.3 / Linux aarch64、Python 3.12.3、Bun 1.4.2、系统 FFmpeg 6.1.1。部署使用一个专用 Python venv，不替换任何全局工具。Linux 原子防覆盖发布是生产依赖，macOS/Windows 不是本指南承诺的服务器部署平台。
 
 ## 前置条件与目录
 
 - 有源码仓库读取权限；本平台仓库为私有时，先配置自己的 GitHub/gh 登录。不要把令牌写进命令、仓库或截图。
 - Git、Python >=3.12、uv、Bun、`/usr/bin/ffmpeg`；Bun 默认路径是 `~/.bun/bin/bun`，可用 `DWP_BUN` 改。
 - 可选编辑器需要 Rust >=1.88 和系统 linker，仅安装/构建时使用。运行已构建的 editor 不需要启动 Rust 编译器。
-- NVENC 不是安装必需条件。没有兼容 NVIDIA 硬件/驱动/PyAV 编码器时，provider auto 会在独立探测后使用软件 x264。不要为了平台安装更改机器人驱动。
+- NVENC 不是安装必需条件。没有兼容 NVIDIA 硬件/驱动/PyAV 编码器时，provider auto 会在独立四路探测后使用软件 x264。Provider 0.6.3 还支持运行时硬件 codec 故障后整批重试软件一次；失败缓存和原因保留，数据检查标准不变。不要为了平台安装更改机器人驱动。
 - 原始数据挂载目录要对服务账号可读；输出、`.state` 和 venv 要可写。保留视频和中间缓存所需空间，勿默认写回容量紧张的采集盘。
 
 建议沿用现有 Marvin 目录结构：
@@ -113,7 +113,7 @@ curl -fsS http://127.0.0.1:8095/api/environment
 curl -fsS http://127.0.0.1:8095/api/editor/options
 ```
 
-成功标准：`/health` 返回平台 `status: ok`；environment 的 `error` 为 null、tianji 版本为 0.6.2、Python 指向专用 venv、Viewer ready；editor/options 的 available 为 true。`/api/health` 是 Annotation 子系统健康接口，不能代替平台 `/health`。
+成功标准：`/health` 返回平台 `status: ok`；environment 的 `error` 为 null、tianji 版本为 0.6.3、Python 指向专用 venv、Viewer ready；editor/options 的 available 为 true。`/api/health` 是 Annotation 子系统健康接口，不能代替平台 `/health`。
 
 单元模板默认固定 `~/projects/data-web-platform` / `~/projects/letools-tianji`。不同目录须先调整单元或写 systemd drop-in；仅改变 shell 环境不会改变已运行服务。若要求退出登录后仍运行，由管理员按主机策略配置 user lingering，并用 `loginctl show-user "$USER" -p Linger` 检查；用户级 unit 本身不等于已开启 lingering。
 

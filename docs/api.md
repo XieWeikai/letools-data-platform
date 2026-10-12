@@ -1,6 +1,6 @@
 # HTTP API与任务契约
 
-平台0.4.0；本服务关闭通用OpenAPI/交互schema页面，本文记录受限HTTP接口。字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
+平台0.4.1；本服务关闭通用OpenAPI/交互schema页面，本文记录受限HTTP接口。字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
 
 ## 访问与错误
 
@@ -59,6 +59,8 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 请求没有幂等key：重复POST会创建新job，并可能因输出预留/已存在而被拒绝。提交超时先查任务记录，不要盲目重发。队列一次一个作业，退出码与result决定终态；取消保留日志/中间产物，重启标记interrupted，不自动恢复执行。
 
 典型状态字段：id、kind、status、stage、progress、stages、elapsed_seconds、check_report、check_results、result、error、logs、request。转换最新阶段为check_prepare/convert/validate/publish；历史任务可含独立check/prepare。进度不承诺逐帧百分比。
+
+0.4.1 配合 provider 0.6.3：video_encoder=auto 的硬件 codec 运行故障可以触发一次整批软件重试，日志和缓存清单保留原因与失败尝试。check_result 的 completed 可从 1 重新开始；任务投影按索引替换临时结果，最终 check_report 覆盖临时列表，不重复计算轨迹。显式 h264_nvenc 及源解码、磁盘、未知 worker 崩溃仍明确失败。
 
 0.3.0转换固定检查全部输入、只转换通过项。因此`status=succeeded`可以与`check_report.valid=false`同时存在：前者表示通过子集已验证并发布，后者说明原始选择含异常。全部异常仍失败。运行故障、源变化或验证失败不属于可跳过的数据异常。
 

@@ -313,11 +313,15 @@ class JobManager:
             if event.get("status") == "running":
                 item["progress"] = {}
         elif kind == "check_result":
+            # An auto encoder retry checks the complete selection again.
+            # Replace provisional results by index instead of duplicating them.
+            item["check_results"] = item["check_results"][:event["completed"] - 1]
             item["check_results"].append(event["item"])
             item["progress"] = {"completed": event["completed"], "total": event["total"],
                                 "current": event["item"].get("bag", "")}
         elif kind == "check_report":
             item["check_report"] = event["report"]
+            item["check_results"] = list(event["report"].get("results", item["check_results"]))
         elif kind == "conversion_summary":
             item["conversion_summary"] = event["summary"]
         elif kind in {"result", "validation"}:

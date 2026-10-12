@@ -1,7 +1,7 @@
 {
   "recorded_at": "2026-10-12",
   "letools": {"repository": "XieWeikai/letools", "commit": "1c417cc9c205f85cd01a5e5860646f1594738354", "directory": "../letools-tianji"},
-  "data_providers": {"repository": "XieWeikai/data-providers", "commit": "528d3d6c834ccfac79765b83a7dcc65febfca0c7", "directory": "../data-providers", "tianji_version": "0.6.2"},
+  "data_providers": {"repository": "XieWeikai/data-providers", "commit": "487418f5270a77722820d104015cda907fa6facd", "directory": "../data-providers", "tianji_version": "0.6.3"},
   "letools_editor": {"repository": "XieWeikai/letools", "commit": "1c417cc9c205f85cd01a5e5860646f1594738354", "directory": "../letools-tianji/packages/letools-editor", "version": "0.1.0"},
   "letools_visualizer": "dc59887796fd41f37040c0df6b10e6f6a30a1854",
   "lerobot_doctor": "ff9475332cec755eb61a03b30273cc12dccddc28",

@@ -868,7 +868,7 @@
       : "Wrench频率必须≥主FPS，且是它的整数倍。");
   }
   function updateEncodingChoice() {
-    const messages = {auto:"自动探测NVENC，探测不可用时回退CPU x264。",libx264:"已选择CPU libx264：CRF18 / veryfast，不探测NVENC。",h264_nvenc:"已要求NVENC硬件编码：CQ16 / p4 / HQ，不可用时失败。"};
+    const messages = {auto:"探测四路NVENC；硬件不可用或运行中codec失败时，整批使用CPU x264（最多重试一次）。",libx264:"已选择CPU libx264：CRF18 / veryfast，不探测NVENC。",h264_nvenc:"已要求NVENC硬件编码：CQ16 / p4 / HQ，不可用时失败。"};
     put("encoding-choice-help", `${messages[byId("video-encoder").value]} 保留原尺寸，准备后不重复有损编码。`);
   }
   function acceptFolder() {

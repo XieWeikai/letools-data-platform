@@ -56,6 +56,19 @@ def test_conversion_summary_survives_service_restart(tmp_path):
     assert manager(tmp_path).get(job["id"])["conversion_summary"] == summary
 
 
+def test_encoder_retry_replaces_provisional_results_without_duplicates(tmp_path):
+    jobs = manager(tmp_path)
+    job = jobs.submit({"kind": "convert"})
+    item = jobs.records[job["id"]]
+    for index in (1, 2, 1, 2, 3):
+        jobs._event(item, {"event": "check_result", "completed": index, "total": 3,
+                           "item": {"bag": f"bag-{index}", "valid": True}})
+        assert len(item["check_results"]) == index
+    assert [result["bag"] for result in item["check_results"]] == ["bag-1", "bag-2", "bag-3"]
+    jobs._event(item, {"event": "check_report", "report": {"results": [{"bag": "authoritative"}]}})
+    assert item["check_results"] == [{"bag": "authoritative"}]
+
+
 def wait_for(predicate, timeout=5):
     until = time.monotonic() + timeout
     while time.monotonic() < until:
