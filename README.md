@@ -2,7 +2,7 @@
 
 为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-**当前平台版本：0.3.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+**当前平台版本：0.4.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
 
 | 文档 | 读者要完成的任务 |
 |---|---|
@@ -52,9 +52,11 @@ ssh -N -L 18095:127.0.0.1:8095 marvin-tailscale
 | 功能 | 当前支持 | 主要边界 |
 |---|---|---|
 | Provider 发现 | 来自配置的 LeTools Python 环境 | 发现插件不等于已适配网页；原始数采转换目前只支持 Tianji |
-| 原始数据选择 | 服务器目录浏览、筛选、分页、全选/清空/多选 | 选择原始录制，不能把 prepare 缓存或最终数据集当作原始目录 |
+| 原始数据选择 | 实时目录前缀匹配、筛选、分页、全选/清空/多选 | 新建仅创建分类父目录，不预建最终数据集 |
 | 检查与转换 | 完整检查、通过项转换、异常清单、前后episodes/时长、取消、历史 | 全异常不输出；运行故障停止；重启标记 interrupted，不自动重试 |
-| Tianji 数据 | 主 FPS 默认 50，力窗口默认 200 Hz，命令缺失补同帧 state | 网页未单独开放 wrench_fps/编码器/Provider workers；详情见参数表 |
+| Tianji 数据 | 完整TianjiConfig、主FPS默认50、wrench_fps默认200、编码器/Provider workers | 主/力频率须整倍数；固定和内部Source参数明确标为只读 |
+| 界面清理 | 单个/批量取消数据集登记，批量隐藏已结束任务 | 保留数据文件、报告和缓存；活动任务不可清除 |
+| 参数与诊断帮助 | 浅色问号支持悬浮/聚焦/点击，异常附含义/影响/建议 | 原始错误和严重级别保留，不推断没有证据的根因 |
 | 视频 | 原尺寸、高画质 H.264；可用时 NVENC，否则 x264 | 软件解码保持原严格检查；不同编码器的 CQ/CRF 不能按数字等价 |
 | Viewer | 四路视频、信号图、Statistics、Filtering、Frames、Action Insights | 播放器 seek 有容差，不是逐帧编辑器；部分分析依赖足够的 episode |
 | Annotation | 语言 atoms 的保存、读取、时间戳及新目录导出 | 保存写当前数据集标注；Hub 上传是另一个显式操作 |
@@ -66,7 +68,7 @@ ssh -N -L 18095:127.0.0.1:8095 marvin-tailscale
 
 2026-10-12 在 Marvin Thor 对固定 125 条录制完整检查，转换 114 条通过项、单独报告 11 条异常：82,628 行、456 段视频，流程从 572.020 秒降到 **269.509 秒（4 分 29.5 秒）**。这是该批数据和硬件的实测，不能保证所有数据同样耗时。
 
-采用软件 H.264 解码、NVENC CQ16 编码及融合检查准备。数值、时间审计和统计与旧版相同，完整视频时序与画质抽检通过。代价是该批视频约 **3.88 倍体积**、进程树采样峰值约 **8.13 GB**。原软件 CRF18 编码可在 provider CLI/API 显式选择；网页目前使用 auto。完整实验见 [provider 性能记录](https://github.com/XieWeikai/data-providers/blob/main/tianji_provider/docs/PERFORMANCE_ROUND2.md)。
+该历史性能验收采用软件 H.264 解码、NVENC CQ16 编码及融合检查准备。数值、时间审计和统计与旧版相同，完整视频时序与画质抽检通过。代价是该批视频约 **3.88 倍体积**、进程树采样峰值约 **8.13 GB**。0.4.0网页默认auto，也可在高级参数显式选择软件libx264或硬件h264_nvenc；不同配方耗时不应混用。完整实验见 [provider 性能记录](https://github.com/XieWeikai/data-providers/blob/main/tianji_provider/docs/PERFORMANCE_ROUND2.md)。
 
 ## 常用运维
 

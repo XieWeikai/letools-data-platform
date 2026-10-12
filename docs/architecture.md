@@ -1,6 +1,6 @@
 # 架构与代码导航
 
-平台0.3.0，最后核验2026-10-12。本仓库是一层Web编排，不承担机器人控制或训练，也不将对齐算法复制到HTTP路由里。
+平台0.4.0，最后核验2026-10-12。本仓库是一层Web编排，不承担机器人控制或训练，也不将对齐算法复制到HTTP路由里。
 
 ## 三个独立项目与两层“前后端”
 
@@ -54,6 +54,10 @@ API进程不在请求线程里长时间编码。它先规范化路径和参数�
 
 服务重启不会自动重放旧请求。任何未完成状态会标记`interrupted`，保留日志，交给操作者核对后重新提交。输出路径在队列中预留以减少竞争，最终发布仍需要独立的防覆盖检查。
 
+0.4.0任务清除只在`.state/hidden-jobs.json`原子记录隐藏ID，保留记录/报告/缓存和已有Editor计划引用；活动任务整批拒绝。取消登记则在注册锁内原子重写datasets.json，不读写数据集文件。两种清理互相独立，都不属于数据删除。
+
+目录补全只查直接子目录或匹配最后一段前缀，遵守允许根与符号链接边界；前端防抖并按请求序号拒绝旧响应。新建是单层排他mkdir，不覆盖，不创建最终目标或修改已有录制/数据集内容。`ui_help.py`集中维护参数说明，`help.js`支持hover/focus/tap；`explanations.py`只补充解释而不改诊断级别，使用textContent显示输入与日志。
+
 ## 严格转换的分工
 
 1. API确认provider确实在配置的解释器中可用、选择来自当前原始目录、目标尚不存在且不与输入嵌套。
@@ -89,6 +93,7 @@ Viewer构建在平台私有`.state`下。准备缓存时隔离Git父仓库发现
 ├── config/providers.toml       # 本服务的provider配置
 ├── internal-token              # loopback桥接用，非用户登录令牌
 ├── datasets.json               # 数据集路径注册表
+├── hidden-jobs.json            # 隐藏的历史ID，任务文件仍保留
 ├── jobs/<id>/
 │   ├── request.json, status.json, worker.log
 │   ├── check.json, validation.json, editor-plan.json（按任务类型）

@@ -1,6 +1,6 @@
 # HTTP API与任务契约
 
-平台0.3.0；OpenAPI来自运行中的`/openapi.json`，交互schema在`/docs`。以下文档解释行为，字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
+平台0.4.0；本服务关闭通用OpenAPI/交互schema页面，本文记录受限HTTP接口。字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
 
 ## 访问与错误
 
@@ -23,12 +23,17 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 | GET `/health` | 平台进程健康，不等于每个可选组件都就绪 |
 | GET `/api/environment` | Python/LeTools根路径、provider来源版本、白名单、Viewer状态和发现错误 |
 | GET `/api/browse?path=...` | 目录浏览；不是任意文件内容下载 |
+| GET `/api/directories/suggest?path=...` | 完整路径列子目录，末段前缀列匹配项；exact表示输入是否为已有目录 |
+| POST `/api/directories` | `{"parent":"/allowed/existing","name":"new-group"}`，仅创建一个新分类子目录，同名409，不允许写进原录制/数据集/缓存 |
+| GET `/api/ui-help` | 转换、Doctor、Editor及检查/修复项的说明字典 |
 | GET `/api/recordings?path=...&provider=tianji` | 当前可选原始录制及不完整标记 |
 | POST `/api/jobs` | 提交check或convert |
 | GET `/api/jobs`、`/api/jobs/{id}` | 历史或单条状态；报告可能很大，客户端按需取单条 |
 | POST `/api/jobs/{id}/cancel` | 取消排队/运行任务；终态重复调用返回现有状态 |
 | GET `/api/jobs/{id}/report` | 下载完整任务JSON |
 | GET / POST `/api/datasets` | 列出数据集 / 以`{"path":"/absolute/path"}`登记已有数据集 |
+| POST `/api/datasets/remove` | `{"ids":["ID", "local/ID"]}`，只取消登记，返回removed与files_deleted=false，可重新登记 |
+| POST `/api/jobs/clear` | `{"ids":["JOB_ID"]}`，持久隐藏已结束任务；活动项使整批原子拒绝，保留文件及按ID读取报告 |
 
 原始转换请求：
 
@@ -40,13 +45,16 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
   "recordings": ["/home/user/data_recorded/pick_and_place/my_bag-EXAMPLE"],
   "destination": "/home/user/datasets/new_pick_and_place_v21",
   "target_version": "v2.1",
-  "params": {"task": "Pick and place", "fps": 50},
+  "params": {"task": "Pick and place", "fps": 50, "wrench_fps": 200},
   "workers": 2,
-  "video_workers": 4
+  "video_workers": 4,
+  "provider_workers": null,
+  "video_encoder": "auto",
+  "deep_video": true
 }
 ```
 
-此处轨迹名是示例，先从recordings接口取得真实路径。check可省略destination；convert必须新目录。所有选中项必须来自当前source_root列表，不可重复。params公开字段和默认值见[使用手册](usage.md#设置参数)；不接受wrench_fps、video_encoder或prepare_valid_only等未暴露字段。
+此处轨迹名是示例，先从recordings接口取得真实路径。check可省略destination；convert必须新目录。所有选中项必须来自当前source_root列表，不可重复。params包含完整TianjiConfig，wrench_fps默认200且须≥fps并整倍数。顶层provider_workers为null自动或1–64，video_encoder为auto/libx264/h264_nvenc，deep_video只影响独立check（融合convert始终完整检查）。prepare_valid_only固定True不接受覆盖，Source内部统计/原始并发和报告路径由平台管理。
 
 请求没有幂等key：重复POST会创建新job，并可能因输出预留/已存在而被拒绝。提交超时先查任务记录，不要盲目重发。队列一次一个作业，退出码与result决定终态；取消保留日志/中间产物，重启标记interrupted，不自动恢复执行。
 
@@ -55,6 +63,8 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 0.3.0转换固定检查全部输入、只转换通过项。因此`status=succeeded`可以与`check_report.valid=false`同时存在：前者表示通过子集已验证并发布，后者说明原始选择含异常。全部异常仍失败。运行故障、源变化或验证失败不属于可跳过的数据异常。
 
 新增`conversion_summary`，成功时也放入`result.conversion_summary`。`input`、`accepted`和`skipped`含episodes、duration_seconds、known_duration_seconds、unknown_duration_episodes；任一原始时长未知则该组duration_seconds为null。skipped.recordings保留原路径、source_recording_index及issues。`output`仅发布后设置episodes、frames、fps、duration_seconds，之前为null。原始时长按数值rosbag metadata相加，输出按frames/fps；与elapsed_seconds处理耗时不同。历史记录缺字段时保留旧含义，不补算。
+
+0.4.0 API快照为issue及Doctor WARN/FAIL附加`explanation`（title、meaning、evidence、effect、next_step），并提供`validation_explanations`/`error_explanation`。原message、code、severity、valid不改；转换worker保存的原始provider报告保持原样。说明是已审阅规则匹配，未知模式明确保留不确定性，不是自动修复或在线模型生成。
 
 ## Doctor
 
