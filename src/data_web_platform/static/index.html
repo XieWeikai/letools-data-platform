@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Data Web Platform · 数据处理工作台</title>
-  <link rel="stylesheet" href="/static/styles.css?v=0.2.0">
-  <script src="/static/app.js?v=0.2.0" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=0.3.0">
+  <script src="/static/app.js?v=0.3.0" defer></script>
 </head>
 <body data-page="dashboard">
   <a class="skip-link" href="#main">跳转到主要内容</a>
@@ -45,7 +45,7 @@
             <p class="panel-footnote">检查结果仅代表对应任务及参数。正式转换会重新完整检查所选轨迹。</p>
           </section>
           <section class="panel parameters-panel" aria-labelledby="parameters-title">
-            <div class="panel-heading"><div><p class="section-index">02 / CONFIGURATION</p><h2 id="parameters-title">输出与对齐参数</h2></div><span class="badge blue">严格模式</span></div>
+            <div class="panel-heading"><div><p class="section-index">02 / CONFIGURATION</p><h2 id="parameters-title">输出与对齐参数</h2></div><span class="badge blue">严格检查 · 异常跳过</span></div>
             <div class="panel-body">
               <div class="field"><label for="task">任务指令 <span class="required">必填</span></label><textarea id="task" name="task" rows="2" required maxlength="4096" aria-describedby="task-help task-error">Plug in the Ethernet cable</textarea><p id="task-help" class="field-help">原样写入数据集的 task；同一任务内的轨迹使用同一指令。</p><p class="field-error" id="task-error" hidden></p></div>
               <div class="field-grid"><div class="field"><label for="fps">目标帧率 <span class="label-unit">FPS</span></label><input id="fps" name="fps" type="number" value="50" min="1" max="1000" step="1" required aria-describedby="fps-error"><p class="field-error" id="fps-error" hidden></p></div><div class="field"><label for="target-version">LeRobot 格式</label><select id="target-version" name="target_version"><option value="v2.1">v2.1 · 每轨迹独立文件</option><option value="v3.0">v3.0 · 分片存储</option></select></div></div>
@@ -65,7 +65,7 @@
           </section>
         </div>
         <div id="form-errors" class="notice error" role="alert" tabindex="-1" hidden></div>
-        <div class="submit-bar"><div><strong id="submit-summary">尚未选择轨迹</strong><span>检查失败会停止，原始文件保持不变。</span></div><div class="submit-actions"><button type="button" id="check-selected" class="button secondary" disabled>仅检查所选轨迹</button><button type="submit" id="convert-selected" class="button primary" disabled>检查并转换 <span aria-hidden="true">→</span></button></div></div>
+        <div class="submit-bar"><div><strong id="submit-summary">尚未选择轨迹</strong><span>检查全部所选轨迹，只转换通过项；异常逐条报告，原始文件保留。</span></div><div class="submit-actions"><button type="button" id="check-selected" class="button secondary" disabled>仅检查所选轨迹</button><button type="submit" id="convert-selected" class="button primary" disabled>检查并转换通过项 <span aria-hidden="true">→</span></button></div></div>
       </form>
       <section class="panel jobs-panel" aria-labelledby="jobs-title">
         <div class="panel-heading"><div><p class="section-index">03 / ACTIVITY</p><h2 id="jobs-title">任务与检查结果</h2></div><button type="button" id="refresh-jobs" class="button secondary">刷新任务</button></div>
@@ -79,6 +79,7 @@
             <progress id="job-progress-bar" aria-label="逐轨迹检查进度" hidden></progress>
             <div id="job-error" class="notice error" hidden></div>
             <div id="job-result" class="result-summary" hidden></div>
+            <div id="conversion-summary" hidden></div>
             <div class="job-links"><a id="download-report" class="text-link" hidden>下载 JSON 报告</a><button type="button" id="register-output" class="text-button" hidden>加入数据集列表</button></div>
             <div id="check-results" class="check-results"></div>
             <details class="log-section"><summary>运行日志 <span>原始输出，便于追溯问题</span></summary><pre id="job-logs" tabindex="0" aria-label="运行日志"></pre></details>

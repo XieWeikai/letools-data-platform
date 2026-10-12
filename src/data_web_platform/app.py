@@ -186,7 +186,7 @@ def create_app(config=None, *, start_services=True):
                 "default_source": config.default_source,
                 "default_output": str(Path.home() / "datasets"),
                 "error": environment_error, "viewer": viewer.status(),
-                "policy": "strict; no source deletion/splitting; new outputs only"}
+                "policy": "strict checks; convert valid recordings only; report skipped anomalies; no source deletion/splitting; new outputs only"}
 
     @app.get("/api/browse")
     def browse(path: str):

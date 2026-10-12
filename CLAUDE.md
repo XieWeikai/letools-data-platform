@@ -43,7 +43,9 @@ Group commits by behavior: access model, Editor integration, worker/UI fixes,
 deployment, then documentation/evidence. Preserve unrelated staged work; do not
 rewrite published history or fold generated state into a source commit.
 
-Current conversion uses provider check_and_prepare (strict all-selected policy),
-then convert/validate/publish. Keep legacy independent-check behavior and old job
+Current conversion checks all selected inputs and uses check_and_prepare with
+prepare_valid_only=True. Report skipped anomalies; never weaken data rules.
+All-invalid input and operational failures still fail without a published target.
+Then convert/validate/publish. Keep legacy independent-check behavior and old job
 history readable. User docs live in docs/usage.md; deployment/API/architecture
 changes must update their corresponding guides and deploy/sources.json.

@@ -1,6 +1,6 @@
 # HTTP API与任务契约
 
-平台0.2.0；OpenAPI来自运行中的`/openapi.json`，交互schema在`/docs`。以下文档解释行为，字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
+平台0.3.0；OpenAPI来自运行中的`/openapi.json`，交互schema在`/docs`。以下文档解释行为，字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
 
 ## 访问与错误
 
@@ -51,6 +51,10 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 请求没有幂等key：重复POST会创建新job，并可能因输出预留/已存在而被拒绝。提交超时先查任务记录，不要盲目重发。队列一次一个作业，退出码与result决定终态；取消保留日志/中间产物，重启标记interrupted，不自动恢复执行。
 
 典型状态字段：id、kind、status、stage、progress、stages、elapsed_seconds、check_report、check_results、result、error、logs、request。转换最新阶段为check_prepare/convert/validate/publish；历史任务可含独立check/prepare。进度不承诺逐帧百分比。
+
+0.3.0转换固定检查全部输入、只转换通过项。因此`status=succeeded`可以与`check_report.valid=false`同时存在：前者表示通过子集已验证并发布，后者说明原始选择含异常。全部异常仍失败。运行故障、源变化或验证失败不属于可跳过的数据异常。
+
+新增`conversion_summary`，成功时也放入`result.conversion_summary`。`input`、`accepted`和`skipped`含episodes、duration_seconds、known_duration_seconds、unknown_duration_episodes；任一原始时长未知则该组duration_seconds为null。skipped.recordings保留原路径、source_recording_index及issues。`output`仅发布后设置episodes、frames、fps、duration_seconds，之前为null。原始时长按数值rosbag metadata相加，输出按frames/fps；与elapsed_seconds处理耗时不同。历史记录缺字段时保留旧含义，不补算。
 
 ## Doctor
 

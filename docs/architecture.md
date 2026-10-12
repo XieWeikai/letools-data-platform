@@ -1,6 +1,6 @@
 # 架构与代码导航
 
-平台0.2.0，最后核验2026-10-12。本仓库是一层Web编排，不承担机器人控制或训练，也不将对齐算法复制到HTTP路由里。
+平台0.3.0，最后核验2026-10-12。本仓库是一层Web编排，不承担机器人控制或训练，也不将对齐算法复制到HTTP路由里。
 
 ## 三个独立项目与两层“前后端”
 
@@ -58,11 +58,11 @@ API进程不在请求线程里长时间编码。它先规范化路径和参数�
 
 1. API确认provider确实在配置的解释器中可用、选择来自当前原始目录、目标尚不存在且不与输入嵌套。
 2. worker确认录制已保存，建立仅包含所选轨迹的目录链接，创建唯一TianjiConfig。
-3. provider的`check_and_prepare(..., prepare_valid_only=False)`共享读取和视频帧流，执行全部数值/时序/视频检查，写可复用缓存。任何选中项异常不写成功清单；中间文件保留供诊断。
+3. provider的`check_and_prepare(..., prepare_valid_only=True)`共享读取和视频帧流，检查全部输入，只给通过项生成缓存并重编号。平台核对逐条诊断、原录制到episode映射和帧数；异常清单完整保留。全部异常不产生成功清单；运行故障直接终止。
 4. LeTools读取缓存，向私有暂存目标写出指定布局；已准备H.264不二次有损编码。
 5. worker对暂存结果做deep validation，随后通过Linux防覆盖原子rename发布。目标竞争、验证或源稳定性失败均不覆盖已有数据。
 
-独立“仅检查”仍调用check_dataset，不写缓存。普通provider CLI的check和prepare仍是两次调用；融合只是显式优化入口，不是隐式全局缓存。平台不开放valid-only选择策略。
+独立“仅检查”仍调用check_dataset，不写缓存，发现异常仍返回失败诊断。普通provider CLI的check和prepare仍是两次调用；融合只是显式优化入口，不是隐式全局缓存。Web转换固定使用valid-only，客户端不能传任意策略覆盖。`conversion_summary.py`负责输入metadata时长、通过/跳过分组及映射核验；已发布输出数量和时长来自验证后的info.json。摘要事件持久化到任务并随JSON报告返回。
 
 并发有不同层次：队列一次一个作业；Tianji当前自动最多12个录制worker；网页的data/video workers属于后续LeTools封装；Editor有自己的文件/codec并发。把它们混成一个“线程数”会误导调参。当前硬件加速仅编码；CUVID解码因损坏数据拒绝不等价未采用。
 

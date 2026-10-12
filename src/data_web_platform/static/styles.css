@@ -180,6 +180,12 @@ progress::-webkit-progress-value { background: var(--primary); }
 .result-summary strong { display: block; font-size: 19px; font-weight: 650; }
 .result-summary span { font-size: 10px; color: var(--muted); }
 .job-links { display: flex; gap: 12px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+.conversion-counts { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 16px; }
+.conversion-counts caption { text-align: left; font-weight: 650; padding-bottom: 10px; }
+.conversion-counts th, .conversion-counts td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.conversion-counts thead { background: var(--surface-soft); }
+.conversion-counts tbody th { font-weight: 500; }
+.conversion-counts + .field-help { margin: 10px 0 16px; }
 .check-results { margin-top: 15px; }
 .checks-heading { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin: 14px 0 10px; }
 .checks-heading h4 { font-size: 13px; margin: 0; }

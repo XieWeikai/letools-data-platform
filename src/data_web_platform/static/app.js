@@ -63,6 +63,9 @@
   const STATUS = { queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" };
   const STAGE = { queued: "等待执行", preflight: "检查输入", editor_plan: "编辑计划", editor_apply: "数据集编辑", publish: "发布输出", check: "检查数据", check_prepare: "检查与准备", prepare: "对齐与准备", convert: "生成数据集", validate: "验证输出", doctor: "Doctor 诊断", score: "质量评分", gate: "训练准入", fix: "修复副本", trim: "裁剪副本", "merge-check": "合并预检" };
   const ACTIVE = new Set(["queued", "running"]);
+  const conversionSummary = (job) => job.conversion_summary ?? job.result?.conversion_summary;
+  const hasSkipped = (job) => job.kind === "convert" && (conversionSummary(job)?.skipped?.episodes ?? 0) > 0;
+  const statusLabel = (job) => job.status === "succeeded" && hasSkipped(job) ? "已完成 · 跳过异常" : STATUS[job.status] ?? job.status;
   const state = {
     environment: null, preferences: {}, recordings: [], selection: new Set(), page: 0,
     loadedRoot: "", loadedProvider: "", loading: false, recordRequest: 0, submitting: false,
@@ -365,7 +368,7 @@
       state.activeJob = job.id;
       state.resultSignature = "";
       state.jobListSignature = "";
-      toast(kind === "convert" ? "转换任务已提交：将重新检查全部所选轨迹。" : `已提交 ${selected.length} 条轨迹的检查。`);
+      toast(kind === "convert" ? "转换任务已提交：检查全部所选轨迹，跳过异常，只转换通过项。" : `已提交 ${selected.length} 条轨迹的检查。`);
       await refreshJobs();
       byId("jobs-title").scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
     } catch (error) {
@@ -377,7 +380,7 @@
 
   const kindLabel = (job) => job.kind === "editor" ? (job.request?.operation === "plan" ? "编辑计划" : "编辑任务") : job.kind === "convert" ? "转换任务" : job.kind === "doctor" ? "Doctor 任务" : "检查任务";
   function renderJobList() {
-    const signature = JSON.stringify(state.jobs.map((job) => [job.id, job.kind, job.status, job.created_at, job.request?.recordings?.length])) + state.activeJob;
+    const signature = JSON.stringify(state.jobs.map((job) => [job.id, job.kind, job.status, hasSkipped(job), job.created_at, job.request?.recordings?.length])) + state.activeJob;
     if (signature === state.jobListSignature) return;
     state.jobListSignature = signature;
     const items = state.jobs.map((job) => {
@@ -385,7 +388,7 @@
       button.type = "button";
       if (job.id === state.activeJob) button.setAttribute("aria-current", "true");
       const heading = node("span", "job-item-heading");
-      heading.append(node("strong", "", kindLabel(job)), badge(STATUS[job.status] ?? job.status, job.status));
+      heading.append(node("strong", "", kindLabel(job)), badge(statusLabel(job), job.status === "succeeded" && hasSkipped(job) ? "warning" : job.status));
       const count = job.request?.recordings?.length;
       button.append(heading, node("small", "", `${count !== undefined ? `${count} 条轨迹 · ` : ""}${dateTime(job.created_at)}`), node("small", "path-text", String(job.id).slice(0, 12)));
       button.addEventListener("click", async () => {
@@ -416,7 +419,8 @@
   }
   function renderChecks(job) {
     const results = jobResults(job);
-    const signature = JSON.stringify(results) + job.id;
+    const skipsInvalid = conversionSummary(job)?.policy === "valid_only";
+    const signature = JSON.stringify(results) + job.id + skipsInvalid;
     if (state.resultSignature === signature) return;
     state.resultSignature = signature;
     const open = new Set([...byId("check-results").querySelectorAll("details[open]")].map((item) => item.dataset.path));
@@ -424,7 +428,7 @@
     if (results.length) {
       const heading = node("div", "checks-heading");
       const passed = results.filter((result) => result.valid).length;
-      heading.append(node("h4", "", "逐条检查结果"), badge(`${passed} 通过 · ${results.length - passed} 异常`, passed === results.length ? "succeeded" : "failed"));
+      heading.append(node("h4", "", "逐条检查结果"), badge(`${passed} 通过 · ${results.length - passed} ${skipsInvalid ? "异常跳过" : "异常"}`, passed === results.length ? "succeeded" : "warning"));
       content.push(heading);
       for (const [index, result] of results.entries()) {
         const item = node("details", "check-item");
@@ -432,7 +436,7 @@
         item.dataset.path = path;
         item.open = open.has(path);
         const heading = node("summary");
-        heading.append(badge(result.valid ? "通过" : "异常", result.valid ? "succeeded" : "failed"), node("span", "check-name", basename(path)));
+        heading.append(badge(result.valid ? "通过" : skipsInvalid ? "跳过 · 异常" : "异常", result.valid ? "succeeded" : "failed"), node("span", "check-name", basename(path)));
         const issues = Array.isArray(result.issues) ? result.issues : [];
         const infoCount = issues.filter((issue) => issue.severity === "info").length;
         heading.append(node("span", "field-help", `${issues.length} 项记录${infoCount ? ` · ${infoCount} 条说明` : ""}`));
@@ -469,12 +473,41 @@
     item.append(node("strong", "", value), node("span", "", label));
     return item;
   }
+  function renderConversionSummary(job) {
+    const target = byId("conversion-summary");
+    const summary = conversionSummary(job);
+    show(target, job.kind === "convert" && Boolean(summary));
+    if (job.kind !== "convert" || !summary) { target.replaceChildren(); return; }
+    const table = node("table", "conversion-counts");
+    table.append(node("caption", "", "转换前后数据量"));
+    const head = node("tr");
+    for (const text of ["范围", "Episodes", "累计轨迹时长"]) {
+      const cell = node("th", "", text); cell.scope = "col"; head.append(cell);
+    }
+    const thead = node("thead"); thead.append(head); table.append(thead);
+    const body = node("tbody");
+    const rows = [["转换前 · 所选原始录制", summary.input],
+      ...(summary.skipped ? [["跳过 · 检查异常", summary.skipped]] : []),
+      ...(summary.accepted ? [["通过项 · 裁剪前", summary.accepted]] : []),
+      ["转换后 · 已发布输出", summary.output]];
+    for (const [label, group] of rows) {
+      const row = node("tr"), heading = node("th", "", label); heading.scope = "row";
+      const length = !group ? "尚未发布" : group.unknown_duration_episodes
+        ? `已知 ${duration(group.known_duration_seconds)}；${group.unknown_duration_episodes} 条未知`
+        : duration(group.duration_seconds);
+      row.append(heading, node("td", "", group ? number(group.episodes) : "—"), node("td", "", length));
+      body.append(row);
+    }
+    table.append(body);
+    const note = node("p", "field-help", "原始时长按各录制 data/metadata.yaml 累计；输出按实际帧数 / FPS。差异包含跳过异常、共同区间对齐和首尾裁剪；任务处理耗时另列。未知时长不会当作 0。旧任务不补算这些统计。");
+    target.replaceChildren(table, note);
+  }
   function renderJob(job) {
     state.job = job;
     put("job-title", `${kindLabel(job)} · ${String(job.id).slice(0, 8)}`);
     const status = byId("job-status");
-    status.textContent = STATUS[job.status] ?? job.status;
-    status.className = `badge ${Object.hasOwn(STATUS, job.status) ? job.status : "neutral"}`;
+    status.textContent = statusLabel(job);
+    status.className = `badge ${job.status === "succeeded" && hasSkipped(job) ? "warning" : Object.hasOwn(STATUS, job.status) ? job.status : "neutral"}`;
     const params = job.request?.params;
     const description = [dateTime(job.created_at), `耗时 ${duration(job.elapsed_seconds)}`];
     if (params) description.push(`${params.fps} FPS`, job.request.target_version ?? "v2.1");
@@ -497,7 +530,7 @@
       return step;
     }));
     const progress = job.progress ?? {};
-    const counted = ACTIVE.has(job.status) && ["check", "prepare"].includes(job.stage) && Number.isFinite(progress.completed) && Number.isFinite(progress.total) && progress.total > 0;
+    const counted = ACTIVE.has(job.status) && ["check", "check_prepare", "prepare"].includes(job.stage) && Number.isFinite(progress.completed) && Number.isFinite(progress.total) && progress.total > 0;
     show(byId("job-progress-bar"), counted);
     if (counted) {
       byId("job-progress-bar").max = progress.total;
@@ -506,6 +539,7 @@
     }
     let progressText = job.status === "queued" ? "任务已进入队列，等待服务器执行。" : job.status === "running" ? `${STAGE[job.stage] ?? job.stage}进行中${counted ? `：${progress.completed} / ${progress.total} 条轨迹已完成` : "，当前阶段暂无可计数进度"}。` : job.status === "succeeded" ? "任务已完成。详细耗时与检查结果见下方。" : job.status === "cancelled" ? "任务已取消；原始数据未修改。" : "任务已停止，请查看错误与检查报告。";
     if (ACTIVE.has(job.status) && progress.current) progressText += ` 当前：${progress.current}`;
+    if (job.status === "succeeded" && hasSkipped(job)) progressText = `转换已完成：跳过 ${conversionSummary(job).skipped.episodes} 条异常轨迹，仅发布通过项。跳过原因见逐条检查结果；源文件保留。`;
     put("job-progress", progressText);
     put("job-error", job.error ? (typeof job.error === "string" ? job.error : pretty(job.error)) : "");
     show(byId("job-error"), Boolean(job.error));
@@ -530,6 +564,7 @@
     if (job.status === "succeeded") facts.push(resultStat("任务总耗时", duration(job.elapsed_seconds)));
     replace(byId("job-result"), facts);
     show(byId("job-result"), Boolean(facts.length));
+    renderConversionSummary(job);
     show(byId("register-output"), ["convert", "editor"].includes(job.kind) && job.status === "succeeded" && Boolean(job.request?.destination));
     renderChecks(job);
     if (job.kind === "editor" && job.result) {

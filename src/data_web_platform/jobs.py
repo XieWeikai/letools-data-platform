@@ -295,6 +295,8 @@ class JobManager:
                                 "current": event["item"].get("bag", "")}
         elif kind == "check_report":
             item["check_report"] = event["report"]
+        elif kind == "conversion_summary":
+            item["conversion_summary"] = event["summary"]
         elif kind in {"result", "validation"}:
             item[kind] = event.get("result", event.get("report"))
         elif kind == "progress":

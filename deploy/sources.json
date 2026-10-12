@@ -1,8 +1,8 @@
 {
   "recorded_at": "2026-10-12",
-  "letools": {"repository": "XieWeikai/letools", "commit": "d68a8fec6c39cffbe6a865b0bd06199dff514d18", "directory": "../letools-tianji"},
-  "data_providers": {"repository": "XieWeikai/data-providers", "commit": "f96cc009404f741857f933abd3066615c723290b", "directory": "../data-providers", "tianji_version": "0.6.2"},
-  "letools_editor": {"repository": "XieWeikai/letools", "commit": "d68a8fec6c39cffbe6a865b0bd06199dff514d18", "directory": "../letools-tianji/packages/letools-editor", "version": "0.1.0"},
+  "letools": {"repository": "XieWeikai/letools", "commit": "1c417cc9c205f85cd01a5e5860646f1594738354", "directory": "../letools-tianji"},
+  "data_providers": {"repository": "XieWeikai/data-providers", "commit": "528d3d6c834ccfac79765b83a7dcc65febfca0c7", "directory": "../data-providers", "tianji_version": "0.6.2"},
+  "letools_editor": {"repository": "XieWeikai/letools", "commit": "1c417cc9c205f85cd01a5e5860646f1594738354", "directory": "../letools-tianji/packages/letools-editor", "version": "0.1.0"},
   "letools_visualizer": "dc59887796fd41f37040c0df6b10e6f6a30a1854",
   "lerobot_doctor": "ff9475332cec755eb61a03b30273cc12dccddc28",
   "runtime": {"python": "3.12.3", "bun": "1.4.2", "platform": "Linux aarch64"}

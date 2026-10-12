@@ -44,6 +44,18 @@ def test_real_events_keep_info_diagnostics_and_failures(tmp_path):
     assert state["error"] == "gap detected"
 
 
+def test_conversion_summary_survives_service_restart(tmp_path):
+    jobs = manager(tmp_path)
+    job = jobs.submit({"kind": "convert"})
+    item = jobs.records[job["id"]]
+    summary = {"policy": "valid_only", "input": {"episodes": 3, "duration_seconds": 45},
+               "skipped": {"episodes": 1}, "output": {"episodes": 2, "duration_seconds": 20}}
+    jobs._event(item, {"event": "conversion_summary", "summary": summary})
+    item["status"] = "succeeded"
+    jobs._save(item)
+    assert manager(tmp_path).get(job["id"])["conversion_summary"] == summary
+
+
 def wait_for(predicate, timeout=5):
     until = time.monotonic() + timeout
     while time.monotonic() < until:

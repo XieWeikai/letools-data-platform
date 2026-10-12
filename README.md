@@ -2,7 +2,7 @@
 
 为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-**当前平台版本：0.2.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+**当前平台版本：0.3.0；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.2、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
 
 | 文档 | 读者要完成的任务 |
 |---|---|
@@ -42,7 +42,7 @@ ssh -N -L 18095:127.0.0.1:8095 marvin-tailscale
 1. 在工作台选择 `tianji`，点击“选择目录”，选择**服务器上的原始录制目录**并加载。
 2. 全选、清空或手动勾选轨迹。可先运行“仅检查所选轨迹”，查看每条的错误与处理说明。
 3. 填写任务指令、FPS、目标 v2.1/v3.0 和一个尚不存在的输出目录，再点“检查并转换”。
-4. 当前转换依次显示“检查与准备 → 生成数据集 → 验证输出 → 发布输出”。任一选中轨迹异常则整批停止；不会静默只转换通过项。
+4. “检查并转换通过项”依次显示“检查与准备 → 生成数据集 → 验证输出 → 发布输出”。检查全部选中轨迹，只转换通过项；异常逐条报告并跳过。全部异常或运行故障仍停止。
 5. 输出成功后自动登记到“数据集”。从卡片进入可视化与标注、Doctor 或编辑器；已有 LeRobot 数据集也可手动登记。
 
 原始 MCAP 不会被修改、删除或拆轨迹。转换、标注导出、Doctor fix/trim、Editor 都要求新输出；**Annotation 的保存会有意写入当前数据集的标注元数据**，这是与只读浏览不同的操作。
@@ -53,7 +53,7 @@ ssh -N -L 18095:127.0.0.1:8095 marvin-tailscale
 |---|---|---|
 | Provider 发现 | 来自配置的 LeTools Python 环境 | 发现插件不等于已适配网页；原始数采转换目前只支持 Tianji |
 | 原始数据选择 | 服务器目录浏览、筛选、分页、全选/清空/多选 | 选择原始录制，不能把 prepare 缓存或最终数据集当作原始目录 |
-| 检查与转换 | 完整检查、融合准备、v2.1/v3.0、报告、取消、历史 | 任一异常整批拒绝；重启标记 interrupted，不自动重试 |
+| 检查与转换 | 完整检查、通过项转换、异常清单、前后episodes/时长、取消、历史 | 全异常不输出；运行故障停止；重启标记 interrupted，不自动重试 |
 | Tianji 数据 | 主 FPS 默认 50，力窗口默认 200 Hz，命令缺失补同帧 state | 网页未单独开放 wrench_fps/编码器/Provider workers；详情见参数表 |
 | 视频 | 原尺寸、高画质 H.264；可用时 NVENC，否则 x264 | 软件解码保持原严格检查；不同编码器的 CQ/CRF 不能按数字等价 |
 | Viewer | 四路视频、信号图、Statistics、Filtering、Frames、Action Insights | 播放器 seek 有容差，不是逐帧编辑器；部分分析依赖足够的 episode |

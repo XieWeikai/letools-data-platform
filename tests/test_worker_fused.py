@@ -58,6 +58,9 @@ def scenario(tmp_path, monkeypatch):
         root.mkdir()
         (root / "session.json").write_text(json.dumps({"phase": "saved"}))
         (root / "recording.mcap").write_bytes(b"immutable original recording fixture")
+        (root / "data").mkdir()
+        (root / "data/metadata.yaml").write_text(
+            f"rosbag2_bagfile_information:\n  duration:\n    nanoseconds: {(index + 1) * 1_000_000_000}\n")
         roots.append(root)
     job = tmp_path / "job"
     job.mkdir()
@@ -73,10 +76,12 @@ def scenario(tmp_path, monkeypatch):
     state = SimpleNamespace(
         roots=roots, job=job, destination=destination, request=request,
         request_file=job / "request.json", report=report,
-        fused_result={"report": report, "manifest": {"episodes": [{"index": 0}, {"index": 1}],
+        fused_result={"report": report, "manifest": {"episodes": [{"index": 0, "length": 6}, {"index": 1, "length": 6}],
+                        "source_selection": {"mode": "explicit_valid_only", "episode_mapping": [
+                            {"source_recording_index": i, "episode_index": i} for i in range(2)]},
                         "timings": {"checked_prepare_seconds": 2.0}}},
         fused_error=None, during_fused=None, convert_error=None,
-        validation=ValidationResult(), validation_error=None,
+        validation=ValidationResult(), validation_error=None, during_convert=None, output_override={},
         calls=[], events=[], fused_kwargs=None, configs=[], source=object())
 
     def save():
@@ -127,7 +132,12 @@ def scenario(tmp_path, monkeypatch):
         if state.convert_error:
             raise state.convert_error
         target.mkdir()
-        return ConversionResult(str(target))
+        (target / "meta").mkdir()
+        (target / "meta/info.json").write_text(json.dumps({"total_episodes": state.report["valid_recordings"],
+            "total_frames": state.report["valid_frames"], "fps": state.request["params"]["fps"], **state.output_override}))
+        if state.during_convert:
+            state.during_convert()
+        return ConversionResult(str(target), state.report["valid_frames"])
 
     def validate(target, *, deep):
         state.calls.append("validate")
@@ -180,12 +190,12 @@ def test_check_only_keeps_independent_read_only_diagnostics(scenario):
     assert [event["report"] for event in state.events if event["event"] == "check_report"] == [state.report]
 
 
-def test_conversion_has_one_truthful_fused_stage_and_forces_strict_selection(scenario):
+def test_conversion_checks_every_recording_and_selects_valid_only(scenario):
     state = scenario
-    state.request["prepare_valid_only"] = True  # Untrusted request cannot loosen Web policy.
+    state.request["prepare_valid_only"] = False  # Worker owns the Web policy.
     before = raw_snapshot(state.roots)
     worker.run(state.save())
-    assert state.fused_kwargs["prepare_valid_only"] is False
+    assert state.fused_kwargs["prepare_valid_only"] is True
     assert state.fused_kwargs["video_encoder"] == "auto"
     assert state.calls == ["check_prepare", "open_cache", "staging", "convert", "validate", "publish"]
     assert running_stages(state) == ["check_prepare", "convert", "validate", "publish"]
@@ -195,19 +205,81 @@ def test_conversion_has_one_truthful_fused_stage_and_forces_strict_selection(sce
     result, = [event["result"] for event in state.events if event["event"] == "result"]
     assert set(result["timings"]) == {"check_prepare", "convert", "validate", "publish"}
     assert result["destination"] == str(state.destination)
+    summary = result["conversion_summary"]
+    assert summary["input"]["episodes"] == 2 and summary["input"]["duration_seconds"] == 3
+    assert summary["output"] == {"episodes": 2, "frames": 12, "fps": 50, "duration_seconds": .24}
+    assert summary["skipped"]["episodes"] == 0
 
 
-def test_invalid_selected_recording_retains_complete_report_and_never_converts(scenario):
+def test_mixed_selection_converts_only_valid_episode_and_reports_skip(scenario):
     state = scenario
-    state.request["prepare_valid_only"] = True
-    state.report.update(valid=False, valid_recordings=1, invalid_recordings=1)
-    state.report["results"][1].update(valid=False, frames=0, issues=[{"code": "video_decode_error", "severity": "error"}])
+    state.report.update(valid=False, valid_recordings=1, invalid_recordings=1, valid_frames=6)
+    state.report["results"][0].update(valid=False, frames=0, issues=[{"code": "video_decode_error", "severity": "error"}])
+    state.fused_result["manifest"]["episodes"] = [{"index": 0, "length": 6}]
+    state.fused_result["manifest"]["source_selection"]["episode_mapping"] = [{"source_recording_index": 1, "episode_index": 0}]
+    before = raw_snapshot(state.roots)
+    worker.run(state.save())
+    assert state.destination.exists()
+    assert raw_snapshot(state.roots) == before
+    assert json.loads((state.job / "check.json").read_text())["valid"] is False
+    result, = [e["result"] for e in state.events if e["event"] == "result"]
+    summary = result["conversion_summary"]
+    assert summary["accepted"]["duration_seconds"] == 2
+    assert summary["skipped"]["episodes"] == 1 and summary["skipped"]["duration_seconds"] == 1
+    assert summary["skipped"]["recordings"][0]["path"] == str(state.roots[0])
+    assert summary["skipped"]["recordings"][0]["issues"][0]["code"] == "video_decode_error"
+    assert summary["output"]["episodes"] == 1 and summary["output"]["duration_seconds"] == .12
+
+
+@pytest.mark.parametrize("kind", ["convert", "check"])
+def test_all_invalid_keeps_report_and_never_publishes(scenario, kind):
+    state = scenario
+    state.request["kind"] = kind
+    state.report.update(valid=False, valid_recordings=0, invalid_recordings=2, valid_frames=0)
+    for item in state.report["results"]:
+        item.update(valid=False, frames=0, issues=[{"code": "video_decode_error", "severity": "error"}])
     state.fused_result["manifest"] = None
-    with pytest.raises(ValueError, match="严格检查未通过"):
+    with pytest.raises(ValueError, match="未通过检查|严格检查未通过"):
         worker.run(state.save())
-    assert state.fused_kwargs["prepare_valid_only"] is False
     assert json.loads((state.job / "check.json").read_text()) == state.report
     assert_no_conversion(state)
+
+
+@pytest.mark.parametrize("bad", ["mapping", "count", "length"])
+def test_manifest_must_match_exact_passing_subset(scenario, bad):
+    manifest = scenario.fused_result["manifest"]
+    if bad == "mapping":
+        manifest["source_selection"]["episode_mapping"][0]["source_recording_index"] = 1
+    elif bad == "count":
+        manifest["episodes"].pop()
+    else:
+        manifest["episodes"][0]["length"] = 8
+    with pytest.raises(ValueError, match="不一致"):
+        worker.run(scenario.request_file)
+    assert_no_conversion(scenario)
+
+
+def test_missing_raw_duration_is_unknown_not_zero(scenario):
+    (scenario.roots[0] / "data/metadata.yaml").unlink()
+    worker.run(scenario.request_file)
+    summary = [e["result"] for e in scenario.events if e["event"] == "result"][0]["conversion_summary"]
+    assert summary["input"] == {"episodes": 2, "duration_seconds": None,
+                                "known_duration_seconds": 2, "unknown_duration_episodes": 1}
+
+
+def test_source_changes_during_conversion_prevent_publication(scenario):
+    scenario.during_convert = lambda: (scenario.roots[0] / "recording.mcap").write_bytes(b"changed")
+    with pytest.raises(ValueError, match="转换期间原始数据发生变化"):
+        worker.run(scenario.request_file)
+    assert "publish" not in scenario.calls and not scenario.destination.exists()
+
+
+@pytest.mark.parametrize("field", ["total_episodes", "total_frames", "fps"])
+def test_backend_cannot_publish_counts_different_from_prepared_subset(scenario, field):
+    scenario.output_override[field] = 999
+    with pytest.raises(ValueError, match="通过项不一致"):
+        worker.run(scenario.request_file)
+    assert "publish" not in scenario.calls
 
 
 def test_omitted_recording_is_rejected_before_conversion(scenario):
