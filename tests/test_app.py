@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -125,6 +126,32 @@ def test_config_override_derives_paths(monkeypatch, tmp_path):
     c = Config.from_env()
     assert c.state_dir == tmp_path / "platform/.state"
     assert c.python == tmp_path / "letools/.venv/bin/python"
+
+
+def test_cleanup_and_directory_endpoints_keep_files(client, config):
+    from test_paths import make_dataset
+    root = make_dataset(config.project_root / 'sample')
+    item = client.post('/api/datasets',json={'path':str(root)}).json()
+    response = client.post('/api/datasets/remove',json={'ids':[item['id']]})
+    assert response.status_code == 200 and response.json()['files_deleted'] is False
+    assert client.get('/api/datasets').json() == [] and (root/'meta/info.json').is_file()
+    assert client.post('/api/datasets',json={'path':str(root)}).json()['id'] == item['id']
+    jobs = client.app.state.jobs
+    job = jobs.submit({'kind':'check'})
+    assert client.post('/api/jobs/clear',json={'ids':[job['id']]}).status_code == 400
+    jobs.records[job['id']]['status'] = 'succeeded'
+    assert client.post('/api/jobs/clear',json={'ids':[job['id']]}).json()['cleared'] == [job['id']]
+    assert client.get('/api/jobs').json() == []
+    assert client.get(f'/api/jobs/{job["id"]}/report').status_code == 200
+    made = client.post('/api/directories',json={'parent':str(config.project_root),'name':'new-group'})
+    assert made.status_code == 201 and Path(made.json()['path']).is_dir()
+    assert client.post('/api/directories',json={'parent':str(config.project_root),'name':'new-group'}).status_code == 409
+    match = client.get('/api/directories/suggest',params={'path':str(config.project_root/'new-g')}).json()
+    assert match['exact'] is False and len(match['directories']) == 1
+    assert client.post('/api/directories',json={'parent':'/etc','name':'blocked'}).status_code == 400
+    assert client.post('/api/datasets/remove',json={'ids':[item['id']]},headers={'Origin':'https://elsewhere.example'}).status_code == 403
+    help_ = client.get('/api/ui-help').json()
+    assert 'wrench-fps' in help_['workbench'] and 'dry_run' in help_['doctor']
 
 
 def test_provider_restricted(config):

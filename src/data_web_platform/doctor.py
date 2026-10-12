@@ -21,6 +21,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .datasets import dataset_fingerprint
 from .paths import validate_output_path, validate_path
+from .explanations import annotate_report
 
 CHECKS = ("metadata", "temporal", "actions", "videos", "statistics", "episodes",
           "consistency", "training", "anomalies", "portability", "per_episode", "kinematics")
@@ -153,7 +154,7 @@ def run_check(path: Path, *, checks=None, max_episodes=None, urdf=None, workspac
     result = json.loads(report_to_json(report))
     if note:
         result["compatibility"] = note
-    return result
+    return annotate_report(result)
 
 
 class DoctorReports:
@@ -232,14 +233,15 @@ def _doctor_html(dataset: str) -> str:
     fixes = "".join(f'<label><input type="checkbox" name="fixes" value="{name}" checked>{name}</label>' for name in FIXES)
     return '''<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LeRobot Doctor</title><style>body{font:16px system-ui;background:#101724;color:#e8edf8;max-width:1000px;margin:32px auto;padding:0 20px}input,select,button,textarea{font:inherit;padding:8px;background:#18243a;color:inherit;border:1px solid #53637d;border-radius:5px}label{display:inline-block;margin:6px}fieldset{margin:16px 0;border:1px solid #53637d}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#172136}button{cursor:pointer}a{color:#93c5fd}.warning{color:#fde68a}</style>
-<a href="/">← 工作台</a><h1>LeRobot Doctor</h1><p>本地 v2.1 / v3.0 数据集诊断。检查、评分、训练门禁和合并兼容性均不修改数据。</p>
+<link rel="stylesheet" href="/static/help.css?v=0.4.0"><script src="/static/help.js?v=0.4.0" defer></script><body data-help-context="doctor">
+<a href="/">← 工作台</a><h1>LeRobot Doctor</h1><p>本地 v2.1 / v3.0 数据集诊断。检查、评分、训练门禁和合并兼容性均不修改数据。参数旁的问号支持悬浮、键盘聚焦和点击查看说明。</p>
 <form id="doctor"><label>数据集 <input name="dataset" style="width:34em;max-width:80vw" value="''' + html.escape(dataset, quote=True) + '''" required></label>
 <label>操作 <select name="operation"><option>check</option><option>score</option><option>gate</option><option>merge-check</option><option>fix</option><option>trim</option></select></label>
 <fieldset><legend>Check：12 项原生检查</legend>''' + checks + '''<br><label>最多 episodes（空=全部）<input type="number" min="1" name="max_episodes"></label><label>URDF（可选本地路径）<input name="urdf"></label><label>失败门槛<select name="fail_on"><option>fail</option><option>warn</option></select></label></fieldset>
 <fieldset><legend>Score / Gate</legend><label>评分丢弃阈值<input name="drop_threshold" type="number" min="0" max="100" step="any" value="30"></label><label>策略<select name="policy"><option>act</option><option>diffusion</option><option>smolvla</option><option>pi0</option></select></label><label>Chunk size（可选）<input name="chunk_size" type="number" min="1"></label></fieldset>
 <fieldset><legend>Merge-check</legend><label>数据集 ID，每行一个<textarea name="datasets" rows="3" cols="60"></textarea></label><label><input type="checkbox" name="post_merge">检查合并后的单个数据集</label></fieldset>
 <fieldset><legend>Fix / Trim：只处理新输出</legend><p class="warning">原始数据始终保留。Trim 同步重建视频、时间戳、索引和统计：原分辨率 H.264 CRF 18；按 state/action 任一分量相邻帧变化超过阈值判定活动，保留首次活动前一帧，不拆分轨迹。低于最少活动帧的轨迹默认丢弃；视频缺帧或时间轴不连续会拒绝输出。</p>''' + fixes + '''<br><label>新输出绝对路径<input name="output" style="width:30em;max-width:75vw"></label><label><input type="checkbox" name="confirm">我确认只创建新输出，不修改原数据</label><label><input type="checkbox" name="dry_run">Dry run（Trim 只预览；Fix 创建隔离副本）</label><br><label>活动阈值（原始信号单位/帧）<input name="threshold" type="number" min="0" step="any" value="0.01"></label><label>最少活动帧<input name="min_active" type="number" min="1" value="10"></label><label><input type="checkbox" name="keep_static">保留静止或活动帧不足的轨迹</label></fieldset>
-<button type="submit">提交后台任务</button> <button type="button" id="report">读取完整 12 项报告</button></form><p id="status" role="status"></p><pre id="result"></pre>
+<button type="submit">提交后台任务</button> <button type="button" id="report">读取完整 12 项报告</button></form><p id="status" role="status"></p><div id="doctor-explanations"></div><details open><summary>完整原始报告与结构化说明</summary><pre id="result"></pre></details>
 <script>
 const form=document.querySelector('#doctor'),status=document.querySelector('#status'),result=document.querySelector('#result');
 form.elements.operation.onchange=()=>{form.elements.dataset.required=form.elements.operation.value!=='merge-check'};
@@ -254,6 +256,6 @@ if(['fix','trim'].includes(operation)){p.output=f.get('output');p.confirm=f.has(
 if(operation==='fix')p.fixes=f.getAll('fixes');
 if(operation==='trim'){p.threshold=Number(f.get('threshold'));p.min_active=Number(f.get('min_active'));p.keep_static=f.has('keep_static')}
 try{status.textContent='正在提交…';const job=await responseJSON(await fetch('/api/doctor/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}));result.textContent=JSON.stringify(job,null,2);status.textContent='后台任务已提交；可返回工作台查看进度。';if(job.id)poll(job.id)}catch(e){status.textContent=e.message}};
-async function poll(id){try{const job=await responseJSON(await fetch('/api/jobs/'+encodeURIComponent(id)));result.textContent=JSON.stringify(job,null,2);if(!['succeeded','failed','cancelled','interrupted'].includes(job.status))setTimeout(()=>poll(id),1500)}catch(e){status.textContent=e.message}}
-document.querySelector('#report').onclick=async()=>{try{status.textContent='正在运行全部检查…';const report=await responseJSON(await fetch('/doctor/report.json?dataset='+encodeURIComponent(form.elements.dataset.value)));result.textContent=JSON.stringify(report,null,2);status.textContent=report.cached?'已读取未过期缓存':'检查完成'}catch(e){status.textContent=e.message}};
+async function poll(id){try{const job=await responseJSON(await fetch('/api/jobs/'+encodeURIComponent(id)));result.textContent=JSON.stringify(job,null,2);window.PlatformHelp?.renderReport(document.querySelector('#doctor-explanations'),job.result?.report||job.check_report);if(!['succeeded','failed','cancelled','interrupted'].includes(job.status))setTimeout(()=>poll(id),1500)}catch(e){status.textContent=e.message}}
+document.querySelector('#report').onclick=async()=>{try{status.textContent='正在运行全部检查…';const report=await responseJSON(await fetch('/doctor/report.json?dataset='+encodeURIComponent(form.elements.dataset.value)));result.textContent=JSON.stringify(report,null,2);window.PlatformHelp?.renderReport(document.querySelector('#doctor-explanations'),report);status.textContent=report.cached?'已读取未过期缓存':'检查完成'}catch(e){status.textContent=e.message}};
 </script></html>'''

@@ -24,9 +24,10 @@ from .datasets import DatasetRegistry
 from .doctor import create_doctor_router
 from .editor import create_editor_router
 from .jobs import JobManager
-from .models import JobRequest
-from .paths import browse_directory, validate_path, validate_output_path
+from .models import JobRequest, SelectionIds, NewDirectory
+from .paths import browse_directory, suggest_directories, create_directory, validate_path, validate_output_path
 from .viewer import ViewerService, create_viewer_router
+from .explanations import annotate_job
 
 
 def discover_providers(config):
@@ -188,6 +189,12 @@ def create_app(config=None, *, start_services=True):
                 "error": environment_error, "viewer": viewer.status(),
                 "policy": "strict checks; convert valid recordings only; report skipped anomalies; no source deletion/splitting; new outputs only"}
 
+    @app.get("/api/ui-help")
+    def ui_help():
+        from .ui_help import WORKBENCH, DOCTOR, CHECK_HELP, FIX_HELP, EDITOR
+        return {"workbench": WORKBENCH, "doctor": DOCTOR, "checks": CHECK_HELP,
+                "fixes": FIX_HELP, "editor": EDITOR}
+
     @app.get("/api/browse")
     def browse(path: str):
         result = browse_directory(path, config.allowed_roots)
@@ -200,6 +207,22 @@ def create_app(config=None, *, start_services=True):
             raise HTTPException(400, "当前录制选择面板支持 tianji provider")
         return list_recordings(path, config)
 
+    @app.get("/api/directories/suggest")
+    def suggest(path: str):
+        return suggest_directories(path, config.allowed_roots)
+
+    @app.post("/api/directories", status_code=201)
+    def make_directory(payload: NewDirectory):
+        try:
+            path = create_directory(payload.parent, payload.name, config.allowed_roots)
+        except FileExistsError as error:
+            raise HTTPException(409, str(error)) from error
+        return {"path": str(path)}
+
+    @app.post("/api/jobs/clear")
+    def clear_jobs(payload: SelectionIds):
+        return {"cleared": jobs.clear_history(payload.ids), "files_deleted": False}
+
     @app.post("/api/jobs", status_code=202)
     def submit(payload: JobRequest):
         if environment_error:
@@ -208,12 +231,12 @@ def create_app(config=None, *, start_services=True):
 
     @app.get("/api/jobs")
     def list_jobs():
-        return jobs.all()
+        return [annotate_job(item) for item in jobs.all()]
 
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str):
         try:
-            return jobs.get(job_id)
+            return annotate_job(jobs.get(job_id))
         except KeyError:
             raise HTTPException(404, "任务不存在")
 
@@ -236,6 +259,10 @@ def create_app(config=None, *, start_services=True):
     @app.post("/api/datasets", status_code=201)
     def register(payload: DatasetPath):
         return registry.register(payload.path)
+
+    @app.post("/api/datasets/remove")
+    def remove_datasets(payload: SelectionIds):
+        return {"removed": registry.unregister(payload.ids), "files_deleted": False}
 
     app.include_router(create_doctor_router(config, registry, jobs))
     app.include_router(create_editor_router(config, registry, jobs))

@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Data Web Platform · 数据处理工作台</title>
-  <link rel="stylesheet" href="/static/styles.css?v=0.3.0">
-  <script src="/static/app.js?v=0.3.0" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=0.4.0">
+  <link rel="stylesheet" href="/static/help.css?v=0.4.0">
+  <script src="/static/help.js?v=0.4.0" defer></script>
+  <script src="/static/app.js?v=0.4.0" defer></script>
 </head>
 <body data-page="dashboard">
   <a class="skip-link" href="#main">跳转到主要内容</a>
@@ -50,16 +52,25 @@
               <div class="field"><label for="task">任务指令 <span class="required">必填</span></label><textarea id="task" name="task" rows="2" required maxlength="4096" aria-describedby="task-help task-error">Plug in the Ethernet cable</textarea><p id="task-help" class="field-help">原样写入数据集的 task；同一任务内的轨迹使用同一指令。</p><p class="field-error" id="task-error" hidden></p></div>
               <div class="field-grid"><div class="field"><label for="fps">目标帧率 <span class="label-unit">FPS</span></label><input id="fps" name="fps" type="number" value="50" min="1" max="1000" step="1" required aria-describedby="fps-error"><p class="field-error" id="fps-error" hidden></p></div><div class="field"><label for="target-version">LeRobot 格式</label><select id="target-version" name="target_version"><option value="v2.1">v2.1 · 每轨迹独立文件</option><option value="v3.0">v3.0 · 分片存储</option></select></div></div>
               <div class="field"><label for="destination">输出数据集目录</label><div class="path-input"><input id="destination" name="destination" type="text" spellcheck="false" autocomplete="off" placeholder="填写尚不存在的新目录" aria-describedby="destination-help destination-error"><button type="button" class="button secondary" data-browse="destination">选父目录</button></div><p id="destination-help" class="field-help">必须使用新目录。选择父目录后会追加数据集名称，不覆盖已有数据。</p><p class="field-error" id="destination-error" hidden></p></div>
-              <div class="encoding-note"><span class="mini-label">视频编码</span><strong>H.264 <span>高画质 · yuv420p</span></strong><small>优先硬件编码，不可用时使用软件编码；保留原尺寸，不重复有损编码。实际配方见任务日志。</small></div>
+              <div class="encoding-note"><span class="mini-label">视频编码</span><strong>H.264 <span>高画质 · yuv420p</span></strong><small id="encoding-choice-help">优先硬件编码，不可用时使用软件编码；保留原尺寸，不重复有损编码。实际配方见任务日志。</small></div>
               <details class="advanced-settings"><summary>高级参数<span>对齐规则与执行资源</span></summary><div class="advanced-body">
                 <p class="field-help">观测与视频在共同有效区间对齐；每个保留时刻至少一路控制有效。保留中间暂停，不拆轨迹。</p>
+                <div class="field"><label for="wrench-fps">Wrench 采样频率 Hz</label><input id="wrench-fps" type="number" value="200" min="1" max="1000" step="1" required><p class="field-help" id="wrench-window-help">默认每个50Hz主帧保存4个200Hz力样本，不滤波。</p><p id="wrench-fps-error" class="field-error" hidden></p></div>
                 <div class="field-grid"><div class="field"><label for="max-gap-ms">观测最大间隔 <span class="label-unit">ms</span></label><input id="max-gap-ms" type="number" value="100" min="0.001" max="1000" step="any" required><p class="field-error" id="max-gap-ms-error" hidden></p></div><div class="field"><label for="state-resampling">连续状态重采样</label><select id="state-resampling"><option value="lowpass">低通滤波 · lowpass</option><option value="linear">线性插值 · linear</option></select></div></div>
                 <div class="field-grid"><div class="field"><label for="command-max-age-ms">关节命令保持阈值 <span class="label-unit">ms</span></label><input id="command-max-age-ms" type="number" value="100" min="0.001" max="1000" step="any" required><p class="field-error" id="command-max-age-ms-error" hidden></p></div><div class="field"><label for="gripper-max-gap-ms">夹爪命令保持阈值 <span class="label-unit">ms</span></label><input id="gripper-max-gap-ms" type="number" value="150" min="0.001" max="1000" step="any" required><p class="field-error" id="gripper-max-gap-ms-error" hidden></p></div></div>
                 <p class="field-help">命令超过阈值未更新时，用同帧 state 补齐对应 action；不补造观测。</p>
                 <label class="checkbox-line"><input id="trim-stationary" type="checkbox" checked><span>裁去开头与结尾的静止部分</span></label>
                 <div class="field-grid"><div class="field"><label for="motion-joint-threshold-rad">关节运动阈值 <span class="label-unit">rad</span></label><input id="motion-joint-threshold-rad" type="number" value="0.002" min="0.000001" max="1" step="any" required><p class="field-error" id="motion-joint-threshold-rad-error" hidden></p></div><div class="field"><label for="motion-gripper-threshold">夹爪运动阈值 <span class="label-unit">0–1</span></label><input id="motion-gripper-threshold" type="number" value="0.01" min="0.000001" max="1" step="any" required><p class="field-error" id="motion-gripper-threshold-error" hidden></p></div></div>
                 <div class="field-grid"><div class="field"><label for="workers">数据 workers</label><input id="workers" type="number" value="2" min="1" max="8" step="1" required><p class="field-error" id="workers-error" hidden></p></div><div class="field"><label for="video-workers">视频 workers</label><input id="video-workers" type="number" value="4" min="1" max="8" step="1" required><p class="field-error" id="video-workers-error" hidden></p></div></div>
-                <p class="field-help">workers 控制 LeTools 封装阶段；检查与准备由 provider 自动并行。力数据默认 200 Hz，主 FPS 须为 200 的整数因子。</p>
+                <div class="field-grid"><div class="field"><label for="provider-workers">Provider workers（留空自动）</label><input id="provider-workers" type="number" min="1" max="64" step="1"><p id="provider-workers-error" class="field-error" hidden></p></div><div class="field"><label for="video-encoder">准备视频编码器</label><select id="video-encoder"><option value="auto">自动 · NVENC / x264</option><option value="libx264">CPU · libx264 CRF18</option><option value="h264_nvenc">硬件 · h264_nvenc CQ16</option></select></div></div>
+                <label class="checkbox-line"><input id="deep-video" type="checkbox" checked><span>仅检查时完整解码视频</span></label><p class="field-help">转换始终完整检查视频。provider并发负责检查/准备，上方数据和视频workers负责LeTools封装。</p>
+                <div class="field-grid"><div class="field"><label for="gap-policy">观测缺口策略</label><select id="gap-policy" disabled><option value="error">error · 拒绝异常录制</option></select></div><div class="field"><label for="preset">录制契约 preset</label><select id="preset" disabled><option value="thor-v1">thor-v1</option></select></div></div>
+                <details><summary>平台管理的 Source / 辅助参数</summary><div class="managed-settings">
+                  <label class="checkbox-line"><input id="prepare-valid-only" type="checkbox" checked disabled><span>prepare_valid_only：只转换通过项</span></label>
+                  <label class="checkbox-line"><input id="collect-image-stats" type="checkbox" checked disabled><span>完整图像统计（_collect_image_stats）</span></label>
+                  <div class="field"><label for="source-workers">直接 Source 的内部 _workers</label><input id="source-workers" value="缓存读取路线不使用" disabled></div>
+                  <div class="field"><label for="report-location">report / cache / progress</label><input id="report-location" value="由任务目录与进度回调管理" disabled></div>
+                </div></details>
               </div></details>
             </div>
           </section>
@@ -69,6 +80,7 @@
       </form>
       <section class="panel jobs-panel" aria-labelledby="jobs-title">
         <div class="panel-heading"><div><p class="section-index">03 / ACTIVITY</p><h2 id="jobs-title">任务与检查结果</h2></div><button type="button" id="refresh-jobs" class="button secondary">刷新任务</button></div>
+        <div class="bulk-toolbar"><span id="job-selection-count" role="status">已选 0 条任务记录</span><button type="button" id="jobs-select-all" class="text-button">全选已结束任务</button><button type="button" id="jobs-select-none" class="text-button">全不选</button><button type="button" id="jobs-clear" class="button danger" disabled>清除所选记录</button><small>仅从历史列表隐藏，保留报告、缓存和输出；运行/排队任务不可清除。</small></div>
         <div id="jobs-empty" class="empty-state compact"><h3>暂无处理任务</h3><p>提交检查或转换后，可以在这里查看逐条结果、阶段耗时和运行日志。</p></div>
         <div id="jobs-content" class="jobs-grid" hidden>
           <div id="job-list" class="job-list" aria-label="历史任务"></div>
@@ -78,6 +90,7 @@
             <p id="job-progress" class="progress-message" role="status" aria-live="polite" aria-atomic="true"></p>
             <progress id="job-progress-bar" aria-label="逐轨迹检查进度" hidden></progress>
             <div id="job-error" class="notice error" hidden></div>
+            <div id="job-explanations"></div>
             <div id="job-result" class="result-summary" hidden></div>
             <div id="conversion-summary" hidden></div>
             <div class="job-links"><a id="download-report" class="text-link" hidden>下载 JSON 报告</a><button type="button" id="register-output" class="text-button" hidden>加入数据集列表</button></div>
@@ -90,6 +103,7 @@
     <section id="view-datasets" class="view" aria-labelledby="datasets-title" hidden>
       <div class="page-heading"><div><p class="eyebrow">数据资产 / DATASETS</p><h1 id="datasets-title">本地数据集</h1><p class="subtitle">登记已转换的数据集，查看轨迹或进入 Doctor 进行诊断。</p></div><button type="button" id="refresh-datasets" class="button secondary">刷新列表</button></div>
       <section class="panel dataset-import"><div><h2>添加已有 LeRobot 数据集</h2><p class="field-help">只登记路径，不移动、不复制数据文件。</p></div><form id="dataset-form" novalidate><label class="sr-only" for="dataset-path">数据集目录</label><div class="path-input"><input id="dataset-path" type="text" placeholder="服务器上的数据集绝对路径" spellcheck="false" required><button type="button" class="button secondary" data-browse="dataset-path">选择目录</button><button type="submit" id="add-dataset" class="button primary">添加数据集</button></div><p id="dataset-path-error" class="field-error" role="alert" hidden></p></form></section>
+      <div class="bulk-toolbar"><span id="dataset-selection-count" role="status">已选 0 个数据集</span><button type="button" id="datasets-select-all" class="text-button">全选数据集</button><button type="button" id="datasets-select-none" class="text-button">全不选</button><button type="button" id="datasets-remove" class="button danger" disabled>移除所选登记</button><small>只取消登记，不删除文件；可用原路径重新添加。</small></div>
       <div id="datasets-list" class="datasets-grid"><div class="empty-state"><h2>尚未登记数据集</h2><p>完成转换后添加输出目录，或登记已有的 LeRobot 数据集。</p></div></div>
       <section class="panel doctor-panel" aria-labelledby="doctor-title"><div class="panel-heading"><div><p class="section-index">DATA QUALITY</p><h2 id="doctor-title">Doctor 工具</h2></div><span id="doctor-status" class="badge neutral">正在读取</span></div><div class="panel-body"><p class="field-help">从数据集卡片进入 Doctor，选择诊断、修复或导出功能；修复类操作请先确认范围。</p><div id="doctor-capabilities" class="capability-list"></div></div></section>
     </section>
@@ -107,9 +121,10 @@
     <div id="folder-roots" class="folder-roots" aria-label="允许访问的根目录"></div>
     <form id="folder-path-form" class="path-input"><label class="sr-only" for="folder-path">当前目录</label><input id="folder-path" type="text" spellcheck="false" autocomplete="off"><button type="submit" class="button secondary">前往</button></form>
     <div class="folder-toolbar"><button type="button" id="folder-parent" class="text-button">上一级</button><span id="folder-count" class="field-help"></span></div>
+    <div id="folder-create" class="field" hidden><label for="folder-create-name">新建分类子目录</label><div class="path-input"><input id="folder-create-name" autocomplete="off" placeholder="例如：training_batches"><button type="button" id="folder-create-button" class="button secondary">新建并进入</button></div><p class="field-help">创建的是分类父目录；最终数据集名称在下方填写，由转换成功后创建。</p></div>
     <div id="folder-error" class="notice error" role="alert" hidden></div>
     <div id="folder-list" class="folder-list"></div>
-    <div id="folder-name-field" class="field" hidden><label for="folder-name">新数据集目录名称</label><input id="folder-name" type="text" value="lerobot_v21" autocomplete="off" spellcheck="false"><p class="field-help">将在当前父目录下输出此数据集；不会创建或覆盖已有目录。</p><p id="folder-name-error" class="field-error" hidden></p></div>
+    <div id="folder-name-field" class="field" hidden><label for="folder-name">新数据集目录名称</label><input id="folder-name" type="text" value="lerobot_v21" autocomplete="off" spellcheck="false"><p class="field-help">目标数据集由转换成功后创建，不提前新建、不覆盖已有目录。</p><p id="folder-name-error" class="field-error" hidden></p></div>
     <div class="dialog-footer"><span id="folder-selection" class="path-text"></span><div><button type="button" id="folder-cancel" class="button secondary">取消</button><button type="button" id="folder-select" class="button primary">使用此目录</button></div></div>
   </dialog>
 </body>

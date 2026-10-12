@@ -4,9 +4,10 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>数据集编辑 · Data Web Platform</title>
   <link rel="stylesheet" href="/static/styles.css?v=0.2.0"><link rel="stylesheet" href="/static/editor.css?v=0.2.0">
-  <script src="/static/editor.js?v=0.2.0" defer></script>
+  <script src="/static/editor.js?v=0.4.0" defer></script>
+  <link rel="stylesheet" href="/static/help.css?v=0.4.0"><script src="/static/help.js?v=0.4.0" defer></script>
 </head>
-<body>
+<body data-help-context="editor">
 <a class="skip-link" href="#main">跳转到编辑区</a>
 <header class="topbar"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">D</span><span>Data Web <strong>Platform</strong><small>LeRobot 数据集编辑</small></span></a><a class="button secondary" href="/">返回工作台</a><span id="editor-status" class="badge neutral">正在连接</span></header>
 <main id="main" tabindex="-1">
@@ -55,6 +56,8 @@
   </div></section>
 </main>
 <dialog id="output-dialog" class="folder-dialog" aria-labelledby="output-dialog-title"><div class="dialog-header"><h2 id="output-dialog-title">选择输出父目录</h2><button type="button" id="close-output" class="icon-button" aria-label="关闭">×</button></div>
-  <form id="browse-path-form" class="path-input"><label class="sr-only" for="browse-path">服务器父目录</label><input id="browse-path"><button class="button secondary">前往</button></form><p id="browse-error" role="alert"></p><button type="button" id="browse-parent" class="text-button">上一级</button><div id="browse-directories" class="folder-list"></div><div class="field"><label for="output-name">新数据集目录名</label><input id="output-name" value="edited_dataset"></div><div class="dialog-footer"><button type="button" id="use-output" class="button primary">使用此目录</button></div>
+  <form id="browse-path-form" class="path-input"><label class="sr-only" for="browse-path">服务器父目录</label><input id="browse-path"><button class="button secondary">前往</button></form><p id="browse-error" role="alert"></p><button type="button" id="browse-parent" class="text-button">上一级</button><div id="browse-directories" class="folder-list"></div>
+  <div class="field"><label for="output-create-name">新建分类子目录</label><div class="path-input"><input id="output-create-name"><button type="button" id="output-create" class="button secondary">新建并进入</button></div></div>
+  <div class="field"><label for="output-name">新数据集目录名</label><input id="output-name" value="edited_dataset"></div><p class="field-help">分类父目录可以立即新建，最终数据集名称由编辑完成后创建。</p><div class="dialog-footer"><button type="button" id="use-output" class="button primary">使用此目录</button></div>
 </dialog>
 </body></html>

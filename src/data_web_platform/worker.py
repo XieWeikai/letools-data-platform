@@ -77,12 +77,14 @@ def run(request_file):
     if request["kind"] == "check":
         phase = "check"
         started = stage(phase)
-        report = check_dataset(selected, cfg, deep_video=True, progress=on_record)
+        report = check_dataset(selected, cfg, deep_video=request.get("deep_video", True),
+                               workers=request.get("provider_workers"), progress=on_record)
         manifest = None
     else:
         phase = "check_prepare"
         started = stage(phase)
         fused = check_and_prepare(selected, job_dir / "cache", cfg, progress=on_record,
+                                  workers=request.get("provider_workers"),
                                   video_encoder=request.get("video_encoder", "auto"),
                                   prepare_valid_only=True)
         report, manifest = fused["report"], fused["manifest"]

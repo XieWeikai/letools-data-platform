@@ -1,12 +1,15 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 
 class AlignmentParams(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     task: str = "Plug in the Ethernet cable"
     fps: int = Field(default=50, ge=1, le=1000)
+    wrench_fps: int = Field(default=200, ge=1, le=1000)
+    gap_policy: Literal["error"] = "error"
+    preset: Literal["thor-v1"] = "thor-v1"
     max_gap_ms: float = Field(default=100, gt=0, le=1000)
     command_max_age_ms: float = Field(default=100, gt=0, le=1000)
     gripper_max_gap_ms: float = Field(default=150, gt=0, le=1000)
@@ -22,6 +25,12 @@ class AlignmentParams(BaseModel):
             raise ValueError("task 必须填写，且不超过 4096 个字符")
         return value.strip()
 
+    @model_validator(mode="after")
+    def compatible_rates(self):
+        if self.wrench_fps < self.fps or self.wrench_fps % self.fps:
+            raise ValueError("wrench_fps 必须不低于 fps，且是 fps 的整数倍；例如 50 / 200 Hz")
+        return self
+
 
 class JobRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -34,3 +43,24 @@ class JobRequest(BaseModel):
     params: AlignmentParams = Field(default_factory=AlignmentParams)
     workers: int = Field(default=2, ge=1, le=8)
     video_workers: int = Field(default=4, ge=1, le=8)
+    provider_workers: int | None = Field(default=None, ge=1, le=64)
+    video_encoder: Literal["auto", "libx264", "h264_nvenc"] = "auto"
+    deep_video: bool = True  # Check-only; fused conversion always decodes all video.
+
+
+class SelectionIds(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ids: list[str] = Field(min_length=1, max_length=10000)
+
+    @field_validator("ids")
+    @classmethod
+    def unique_ids(cls, values):
+        if any(not value or len(value) > 200 for value in values):
+            raise ValueError("无效的记录 ID")
+        return list(dict.fromkeys(values))
+
+
+class NewDirectory(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    parent: str
+    name: str = Field(min_length=1, max_length=255)

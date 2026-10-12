@@ -59,7 +59,7 @@
   }
 
   const STORAGE_KEY = "data-web-platform.preferences.v1";
-  const preferenceIds = ["provider", "source-root", "destination", "task", "fps", "target-version", "max-gap-ms", "command-max-age-ms", "gripper-max-gap-ms", "state-resampling", "trim-stationary", "motion-joint-threshold-rad", "motion-gripper-threshold", "workers", "video-workers"];
+  const preferenceIds = ["provider", "source-root", "destination", "task", "fps", "wrench-fps", "target-version", "max-gap-ms", "command-max-age-ms", "gripper-max-gap-ms", "state-resampling", "trim-stationary", "motion-joint-threshold-rad", "motion-gripper-threshold", "workers", "video-workers", "provider-workers", "video-encoder", "deep-video"];
   const STATUS = { queued: "排队中", running: "运行中", succeeded: "已完成", failed: "失败", cancelled: "已取消", interrupted: "已中断" };
   const STAGE = { queued: "等待执行", preflight: "检查输入", editor_plan: "编辑计划", editor_apply: "数据集编辑", publish: "发布输出", check: "检查数据", check_prepare: "检查与准备", prepare: "对齐与准备", convert: "生成数据集", validate: "验证输出", doctor: "Doctor 诊断", score: "质量评分", gate: "训练准入", fix: "修复副本", trim: "裁剪副本", "merge-check": "合并预检" };
   const ACTIVE = new Set(["queued", "running"]);
@@ -71,6 +71,7 @@
     loadedRoot: "", loadedProvider: "", loading: false, recordRequest: 0, submitting: false,
     jobs: [], activeJob: null, job: null, pollTimer: null, refreshingJobs: false,
     jobListSignature: "", resultSignature: "", recordResults: new Map(), datasets: [],
+    selectedJobs: new Set(), selectedDatasets: new Set(), clearingJobs: false, removingDatasets: false,
     browse: { target: null, path: "", parent: null, trigger: null, sequence: 0, loading: false },
   };
   let toastTimer;
@@ -303,6 +304,7 @@
 
   const numericFields = [
     ["fps", "fps", "目标帧率", 1, 1000, true],
+    ["wrench-fps", "wrench_fps", "Wrench采样频率", 1, 1000, true],
     ["max-gap-ms", "max_gap_ms", "观测最大间隔", 0, 1000, false],
     ["command-max-age-ms", "command_max_age_ms", "关节命令保持阈值", 0, 1000, false],
     ["gripper-max-gap-ms", "gripper_max_gap_ms", "夹爪命令保持阈值", 0, 1000, false],
@@ -312,7 +314,7 @@
   function buildRequest(kind, selected) {
     const errors = [];
     const fail = (id, message) => { errors.push({ id, message }); setFieldError(id, message); };
-    for (const id of ["provider", "source-root", "recordings", "task", "destination", ...numericFields.map(([id]) => id), "workers", "video-workers"]) setFieldError(id, "");
+    for (const id of ["provider", "source-root", "recordings", "task", "destination", ...numericFields.map(([id]) => id), "workers", "video-workers", "provider-workers"]) setFieldError(id, "");
     show(byId("form-errors"), false);
     const task = byId("task").value.trim();
     const source = currentSource();
@@ -322,13 +324,17 @@
     if (!state.loadedRoot || state.loadedRoot.replace(/\/+$/, "") !== source.replace(/\/+$/, "") || state.loadedProvider !== provider) fail("source-root", "源目录或 provider 已变化，请重新加载录制。");
     if (!selected.length) fail("recordings", "请至少选择一条录制。");
     if (!task || task.length > 4096) fail("task", "请填写任务指令（1–4096 个字符）。");
-    const params = { task, state_resampling: byId("state-resampling").value, trim_stationary: byId("trim-stationary").checked };
+    const params = { task, state_resampling: byId("state-resampling").value, trim_stationary: byId("trim-stationary").checked, gap_policy: "error", preset: "thor-v1" };
     for (const [id, key, label, min, max, integer] of numericFields) {
       const raw = byId(id).value.trim();
       const value = Number(raw);
       if (!raw || !Number.isFinite(value) || (min === 0 ? value <= 0 : value < min) || value > max || (integer && !Number.isInteger(value))) fail(id, `${label}需${integer ? "为整数，" : ""}${min === 0 ? "大于 0" : `不小于 ${min}`}且不大于 ${max}。`);
       params[key] = value;
     }
+    if (params.wrench_fps < params.fps || params.wrench_fps % params.fps) fail("wrench-fps", "Wrench频率必须≥主FPS，且为其整数倍（如50/200）。");
+    const providerRaw = byId("provider-workers").value.trim();
+    const providerWorkers = providerRaw ? Number(providerRaw) : null;
+    if (providerWorkers !== null && (!Number.isInteger(providerWorkers) || providerWorkers < 1 || providerWorkers > 64)) fail("provider-workers", "留空自动，或填写1–64的整数。");
     const workers = Number(byId("workers").value);
     const videoWorkers = Number(byId("video-workers").value);
     for (const [id, value] of [["workers", workers], ["video-workers", videoWorkers]]) if (!Number.isInteger(value) || value < 1 || value > 8) fail(id, "workers 必须是 1–8 之间的整数。");
@@ -354,7 +360,7 @@
       summary.focus();
       return null;
     }
-    return { kind, provider, source_root: state.loadedRoot, recordings: selected, destination: kind === "convert" ? destination : null, target_version: byId("target-version").value, params, workers, video_workers: videoWorkers };
+    return { kind, provider, source_root: state.loadedRoot, recordings: selected, destination: kind === "convert" ? destination : null, target_version: byId("target-version").value, params, workers, video_workers: videoWorkers, provider_workers: providerWorkers, video_encoder: byId("video-encoder").value, deep_video: byId("deep-video").checked };
   }
   async function submitJob(kind, selected = [...state.selection]) {
     if (state.submitting) return;
@@ -380,7 +386,7 @@
 
   const kindLabel = (job) => job.kind === "editor" ? (job.request?.operation === "plan" ? "编辑计划" : "编辑任务") : job.kind === "convert" ? "转换任务" : job.kind === "doctor" ? "Doctor 任务" : "检查任务";
   function renderJobList() {
-    const signature = JSON.stringify(state.jobs.map((job) => [job.id, job.kind, job.status, hasSkipped(job), job.created_at, job.request?.recordings?.length])) + state.activeJob;
+    const signature = JSON.stringify(state.jobs.map((job) => [job.id, job.kind, job.status, hasSkipped(job), job.created_at, job.request?.recordings?.length])) + state.activeJob + [...state.selectedJobs].join();
     if (signature === state.jobListSignature) return;
     state.jobListSignature = signature;
     const items = state.jobs.map((job) => {
@@ -397,11 +403,17 @@
         renderJobList();
         try { await loadJobDetail(job.id); } catch (error) { globalError(error); }
       });
-      return button;
+      const row = node("div", "job-select-row"), select = node("input");
+      select.type = "checkbox"; select.checked = state.selectedJobs.has(job.id);
+      select.disabled = ACTIVE.has(job.status) || state.clearingJobs;
+      select.setAttribute("aria-label", `选择任务 ${String(job.id).slice(0, 12)}`);
+      select.addEventListener("change", () => { if (select.checked) state.selectedJobs.add(job.id); else state.selectedJobs.delete(job.id); updateBulk(); });
+      row.append(select, button); return row;
     });
     replace(byId("job-list"), items);
     show(byId("jobs-content"), Boolean(items.length));
     show(byId("jobs-empty"), !items.length);
+    updateBulk();
   }
   const jobResults = (job) => Array.isArray(job.check_results) && job.check_results.length ? job.check_results : Array.isArray(job.check_report?.results) ? job.check_report.results : [];
   function updateRecordingResults(job) {
@@ -451,8 +463,11 @@
           const row = node("div", `issue ${severity}`);
           const issueHeading = node("div", "issue-heading");
           issueHeading.append(badge({ error: "错误", warning: "警告", info: "说明" }[severity], severity === "info" ? "blue" : severity), node("code", "", issue.code ?? "检查信息"));
-          row.append(issueHeading, node("p", "", issue.message ?? issue.description ?? ""));
-          const details = Object.fromEntries(Object.entries(issue).filter(([key]) => !["severity", "code", "message", "description"].includes(key)));
+          row.append(issueHeading);
+          if (issue.explanation && window.PlatformHelp) row.append(window.PlatformHelp.explanation(issue.explanation));
+          const original = node("details"), originalTitle = node("summary", "", "原始诊断信息");
+          original.append(originalTitle, node("p", "", issue.message ?? issue.description ?? "")); row.append(original);
+          const details = Object.fromEntries(Object.entries(issue).filter(([key]) => !["severity", "code", "message", "description", "explanation"].includes(key)));
           if (Object.keys(details).length) row.append(node("pre", "issue-data", JSON.stringify(details, null, 2)));
           body.append(row);
         }
@@ -543,6 +558,17 @@
     put("job-progress", progressText);
     put("job-error", job.error ? (typeof job.error === "string" ? job.error : pretty(job.error)) : "");
     show(byId("job-error"), Boolean(job.error));
+    const explanations = byId("job-explanations"); explanations.replaceChildren();
+    if (job.kind === "check" && job.check_report?.deep_video === false) explanations.append(node("p", "notice", "本次为快速检查：未完整解码视频，不能据此确认所有视频帧健康；正式转换仍执行完整视频检查。"));
+    if (window.PlatformHelp) {
+      if (job.error_explanation) explanations.append(window.PlatformHelp.explanation(job.error_explanation));
+      for (const item of job.validation_explanations || []) {
+        const detail = node("details"), summary = node("summary", "", `${item.severity} · 输出验证说明`);
+        detail.append(summary, window.PlatformHelp.explanation(item.explanation), node("pre", "issue-data", pretty(item.message))); explanations.append(detail);
+      }
+      const report = job.result?.report || job.check_report;
+      if (report?.checks) { const block = node("div"); window.PlatformHelp.renderReport(block, report); explanations.append(block); }
+    }
     show(byId("cancel-job"), ACTIVE.has(job.status));
     byId("cancel-job").disabled = false;
     const report = byId("download-report");
@@ -597,6 +623,7 @@
     try {
       const result = await api("/api/jobs");
       state.jobs = Array.isArray(result) ? result : result?.jobs ?? [];
+      state.selectedJobs = new Set([...state.selectedJobs].filter(id => state.jobs.some(job => job.id === id && !ACTIVE.has(job.status))));
       if (!state.jobs.some((job) => job.id === state.activeJob)) state.activeJob = state.jobs[0]?.id ?? null;
       renderJobList();
       if (state.activeJob) await loadJobDetail(state.activeJob);
@@ -628,6 +655,11 @@
     const cards = state.datasets.map((dataset) => {
       const info = dataset.info ?? {};
       const card = node("article", "dataset-card");
+      const selection = node("label", "dataset-select"), checkbox = node("input");
+      checkbox.type = "checkbox"; checkbox.checked = state.selectedDatasets.has(dataset.id); checkbox.disabled = state.removingDatasets;
+      checkbox.setAttribute("aria-label", `选择数据集 ${dataset.name} ${dataset.id}`);
+      checkbox.addEventListener("change", () => { if (checkbox.checked) state.selectedDatasets.add(dataset.id); else state.selectedDatasets.delete(dataset.id); updateBulk(); });
+      selection.append(checkbox, node("span", "", "选择此数据集")); card.append(selection);
       card.append(badge(info.codebase_version ?? "LeRobot", "blue"), node("h2", "", dataset.name || basename(dataset.path)), node("p", "dataset-path", dataset.path));
       const stats = node("div", "dataset-stats");
       stats.append(resultStat("轨迹", number(info.total_episodes)), resultStat("帧", number(info.total_frames)), resultStat("FPS", number(info.fps)));
@@ -638,17 +670,21 @@
       doctor.href = `/doctor?${new URLSearchParams({ dataset: `local/${dataset.id}` })}`;
       const editor = node("a", "button secondary", "编辑数据集");
       editor.href = `/editor?${new URLSearchParams({ dataset: dataset.id })}`;
-      actions.append(viewer, editor, doctor);
+      const remove = node("button", "button danger", "移除登记"); remove.type = "button"; remove.disabled = state.removingDatasets;
+      remove.addEventListener("click", () => removeDatasets([dataset.id]));
+      actions.append(viewer, editor, doctor, remove);
       card.append(stats, actions);
       return card;
     });
     replace(byId("datasets-list"), cards.length ? cards : [empty("尚未登记数据集", "完成转换后添加输出目录，或登记已有的 LeRobot v2.1 / v3.0 数据集。")]);
+    updateBulk();
   }
   async function refreshDatasets() {
     byId("refresh-datasets").disabled = true;
     try {
       const result = await api("/api/datasets");
       state.datasets = Array.isArray(result) ? result : result?.datasets ?? [];
+      state.selectedDatasets = new Set([...state.selectedDatasets].filter(id => state.datasets.some(item => item.id === id)));
       renderDatasets();
     } catch (error) { globalError(error); }
     finally { byId("refresh-datasets").disabled = false; }
@@ -665,6 +701,34 @@
       if (button?.id === "add-dataset") setFieldError("dataset-path", error.message);
       else globalError(error);
     } finally { if (button) button.disabled = false; }
+  }
+  function updateBulk() {
+    put("dataset-selection-count", `已选 ${state.selectedDatasets.size} 个数据集`);
+    put("job-selection-count", `已选 ${state.selectedJobs.size} 条任务记录`);
+    byId("datasets-remove").disabled = !state.selectedDatasets.size || state.removingDatasets;
+    byId("jobs-clear").disabled = !state.selectedJobs.size || state.clearingJobs;
+    byId("datasets-select-all").disabled = !state.datasets.length || state.removingDatasets;
+    byId("jobs-select-all").disabled = !state.jobs.some(job => !ACTIVE.has(job.status)) || state.clearingJobs;
+  }
+  async function removeDatasets(ids = [...state.selectedDatasets]) {
+    if (!ids.length || state.removingDatasets) return;
+    state.removingDatasets = true; renderDatasets();
+    try {
+      const result = await api("/api/datasets/remove", {method:"POST",body:{ids}});
+      ids.forEach(id => state.selectedDatasets.delete(id)); await refreshDatasets();
+      toast(`已移除 ${result.removed.length} 个登记，数据文件保留，可按原路径重新添加。`);
+    } catch (error) { globalError(error); }
+    finally { state.removingDatasets = false; renderDatasets(); }
+  }
+  async function clearJobs() {
+    const ids = [...state.selectedJobs]; if (!ids.length || state.clearingJobs) return;
+    state.clearingJobs = true; updateBulk();
+    try {
+      const result = await api("/api/jobs/clear", {method:"POST",body:{ids}});
+      state.selectedJobs.clear(); state.jobListSignature = ""; await refreshJobs();
+      toast(`已清除 ${result.cleared.length} 条列表记录，报告、缓存和数据集文件保留。`);
+    } catch (error) { globalError(error); }
+    finally { state.clearingJobs = false; updateBulk(); }
   }
   async function loadDoctorCapabilities() {
     try {
@@ -691,19 +755,23 @@
     const folder = state.browse;
     put("folder-selection", folder.target === "destination" ? joinPath(folder.path, byId("folder-name").value.trim()) : folder.path);
   }
-  async function browse(path) {
+  let browseTimer;
+  async function browse(path, typing = false) {
+    clearTimeout(browseTimer);
     const sequence = ++state.browse.sequence;
     state.browse.loading = true;
     show(byId("folder-error"), false);
     byId("folder-select").disabled = true;
     byId("folder-parent").disabled = true;
+    byId("folder-create-button").disabled = true;
     put("folder-count", "正在读取…");
     try {
-      const response = await api(`/api/browse?${new URLSearchParams({ path })}`);
+      const response = await api(`/api/directories/suggest?${new URLSearchParams({ path })}`);
       if (sequence !== state.browse.sequence || !byId("folder-dialog").open) return;
       state.browse.path = response.path;
       state.browse.parent = response.parent;
-      byId("folder-path").value = response.path;
+      state.browse.exact = response.exact;
+      if (!typing && response.exact) byId("folder-path").value = response.path;
       const directories = Array.isArray(response.directories) ? response.directories : response.dirs ?? [];
       const entries = directories.map((directory) => {
         const button = node("button", "folder-entry");
@@ -712,10 +780,11 @@
         button.addEventListener("click", () => browse(directory.path));
         return button;
       });
-      replace(byId("folder-list"), entries.length ? entries : [empty("没有子目录", "可以选择当前目录，或返回上一级。", true)]);
-      put("folder-count", `${directories.length} 个子目录`);
+      replace(byId("folder-list"), entries.length ? entries : [empty(response.exact ? "没有子目录" : "没有匹配目录", response.exact ? "可以选择当前目录，或返回上一级。" : "继续输入或选择一个已有父目录；最终输出名在下方填写。", true)]);
+      put("folder-count", `${directories.length} 个${response.exact ? "子目录" : "前缀匹配"}`);
       byId("folder-parent").disabled = !response.parent;
-      byId("folder-select").disabled = false;
+      byId("folder-select").disabled = !response.exact;
+      byId("folder-create-button").disabled = !response.exact;
       renderFolderSelection();
     } catch (error) {
       if (sequence !== state.browse.sequence) return;
@@ -729,6 +798,7 @@
     const roots = Array.isArray(state.environment?.roots) ? state.environment.roots : [];
     state.browse = { target, path: "", parent: null, trigger, sequence: state.browse.sequence + 1, loading: true };
     show(byId("folder-name-field"), target === "destination");
+    show(byId("folder-create"), target === "destination");
     setFieldError("folder-name", "");
     put("folder-title", target === "destination" ? "选择输出父目录" : target === "dataset-path" ? "选择 LeRobot 数据集" : "选择原始录制目录");
     put("folder-help", target === "destination" ? "选择可写父目录，并输入一个尚不存在的数据集目录名称。" : "浏览服务器允许访问的目录；此操作不会修改源文件。");
@@ -750,6 +820,56 @@
     byId("folder-dialog").showModal();
     byId("folder-path").focus();
     browse(initial);
+  }
+  async function makeFolder() {
+    if (state.browse.loading || !state.browse.exact) return;
+    byId("folder-create-button").disabled = true;
+    try {
+      const result = await api("/api/directories", {method:"POST",body:{parent:state.browse.path,name:byId("folder-create-name").value}});
+      byId("folder-create-name").value = ""; await browse(result.path);
+      toast("分类目录已创建；请填写下方的全新数据集名称。");
+    } catch (error) { put("folder-error", error.message); show(byId("folder-error"), true); }
+    finally { byId("folder-create-button").disabled = !state.browse.exact; }
+  }
+  function setupPathSuggestions(id) {
+    const input = byId(id), list = node("div", "path-suggestions");
+    list.hidden = true; list.setAttribute("aria-label", "匹配的服务器目录");
+    input.closest(".path-input").after(list);
+    let timer, generation = 0;
+    input.addEventListener("input", () => {
+      clearTimeout(timer); const current = ++generation, path = input.value.trim();
+      list.hidden = true;
+      if (!path.startsWith("/")) return;
+      timer = setTimeout(async () => {
+        try {
+          const result = await api(`/api/directories/suggest?${new URLSearchParams({path})}`);
+          if (generation !== current || document.activeElement !== input) return;
+          const choices = result.directories.slice(0, 40).map(dir => {
+            const button = node("button", "text-button", dir.path); button.type = "button";
+            button.addEventListener("click", () => { input.value = dir.path + "/"; input.focus(); input.dispatchEvent(new Event("input")); savePreferences(); });
+            return button;
+          });
+          if (!choices.length) choices.push(node("p", "field-help", id === "destination" ? "没有匹配的已有目录；新输出名可直接保留，发布时创建。" : "没有匹配的已有目录。"));
+          if (result.directories.length > 40) choices.push(node("p", "field-help", "仅显示前40项，请继续输入缩小范围。"));
+          list.replaceChildren(...choices); list.hidden = false;
+        } catch (error) {
+          if (generation !== current || document.activeElement !== input) return;
+          list.replaceChildren(node("p", "field-help", error.message)); list.hidden = false;
+        }
+      }, 220);
+    });
+    input.addEventListener("keydown", event => { if (event.key === "Escape") { generation++; clearTimeout(timer); list.hidden = true; } });
+    document.addEventListener("pointerdown", event => { if (event.target !== input && !list.contains(event.target)) { generation++; list.hidden = true; } });
+  }
+  function updateWrenchWindow() {
+    const fps = Number(byId("fps").value), force = Number(byId("wrench-fps").value);
+    put("wrench-window-help", fps > 0 && force >= fps && force % fps === 0
+      ? `每个主帧保存 ${force/fps} 个力样本，输出 shape=[${force/fps},12]；不滤波。`
+      : "Wrench频率必须≥主FPS，且是它的整数倍。");
+  }
+  function updateEncodingChoice() {
+    const messages = {auto:"自动探测NVENC，探测不可用时回退CPU x264。",libx264:"已选择CPU libx264：CRF18 / veryfast，不探测NVENC。",h264_nvenc:"已要求NVENC硬件编码：CQ16 / p4 / HQ，不可用时失败。"};
+    put("encoding-choice-help", `${messages[byId("video-encoder").value]} 保留原尺寸，准备后不重复有损编码。`);
   }
   function acceptFolder() {
     const folder = state.browse;
@@ -782,6 +902,17 @@
   }
 
   restorePreferences();
+  updateWrenchWindow();
+  updateEncodingChoice();
+  byId("video-encoder").addEventListener("change", updateEncodingChoice);
+  for (const id of ["fps", "wrench-fps"]) byId(id).addEventListener("input", updateWrenchWindow);
+  for (const id of ["source-root", "destination", "dataset-path"]) setupPathSuggestions(id);
+  byId("datasets-select-all").addEventListener("click", () => { state.datasets.forEach(item => state.selectedDatasets.add(item.id)); renderDatasets(); });
+  byId("datasets-select-none").addEventListener("click", () => { state.selectedDatasets.clear(); renderDatasets(); });
+  byId("datasets-remove").addEventListener("click", () => removeDatasets());
+  byId("jobs-select-all").addEventListener("click", () => { state.jobs.filter(item => !ACTIVE.has(item.status)).forEach(item => state.selectedJobs.add(item.id)); renderJobList(); });
+  byId("jobs-select-none").addEventListener("click", () => { state.selectedJobs.clear(); renderJobList(); });
+  byId("jobs-clear").addEventListener("click", clearJobs);
   for (const id of preferenceIds) byId(id).addEventListener("change", savePreferences);
   byId("source-root").addEventListener("input", () => { if (state.loadedRoot || state.loading) invalidateRecordings(); });
   byId("provider").addEventListener("change", () => { updateProviderHelp(); invalidateRecordings(); });
@@ -803,11 +934,18 @@
   for (const button of document.querySelectorAll("[data-view]")) button.addEventListener("click", () => setView(button.dataset.view));
   for (const button of document.querySelectorAll("[data-browse]")) button.addEventListener("click", () => openFolder(button.dataset.browse, button));
   byId("folder-path-form").addEventListener("submit", (event) => { event.preventDefault(); browse(byId("folder-path").value.trim()); });
+  byId("folder-path").addEventListener("input", () => {
+    clearTimeout(browseTimer); state.browse.sequence++; state.browse.loading = true; state.browse.exact = false;
+    byId("folder-select").disabled = true; byId("folder-create-button").disabled = true;
+    browseTimer = setTimeout(() => browse(byId("folder-path").value.trim(), true), 220);
+  });
+  byId("folder-create-button").addEventListener("click", makeFolder);
   byId("folder-parent").addEventListener("click", () => { if (state.browse.parent) browse(state.browse.parent); });
   byId("folder-name").addEventListener("input", renderFolderSelection);
   byId("folder-select").addEventListener("click", acceptFolder);
   byId("folder-cancel").addEventListener("click", () => byId("folder-dialog").close());
-  byId("folder-dialog").addEventListener("close", () => { state.browse.sequence += 1; state.browse.trigger?.focus(); });
+  byId("folder-dialog").addEventListener("close", () => { clearTimeout(browseTimer); state.browse.sequence += 1; state.browse.trigger?.focus(); });
+  document.addEventListener("platform-help-ready", () => { if (state.job) { state.resultSignature = ""; renderJob(state.job); } });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { clearTimeout(state.pollTimer); state.pollTimer = null; }
     else if (state.jobs.some((job) => ACTIVE.has(job.status))) refreshJobs(true);

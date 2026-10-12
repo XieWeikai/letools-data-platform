@@ -80,3 +80,53 @@ def browse_directory(path: str | Path, roots: Iterable[str | Path]) -> dict:
 # Clear names for callers that use listing/output terminology.
 list_directory = browse_directory
 validate_output = validate_output_path
+
+
+def suggest_directories(path: str, roots) -> dict:
+    """Complete one path segment without exposing directories outside roots.
+
+    Existing paths list children; a partial final component filters siblings.
+    Return whether the typed path exists so the UI never selects its parent by
+    mistake. No recursive walk or filesystem mutation occurs while typing.
+    """
+    roots = tuple(roots)
+    raw = str(path).strip()
+    # While an allowed root itself is only partly typed, offer that root alone
+    # rather than listing its otherwise forbidden parent (e.g. /home/us...).
+    root_matches = [Path(root).resolve() for root in roots if str(Path(root).resolve()).startswith(raw)]
+    if raw.startswith("/") and raw != "/" and root_matches and not any(str(p) == raw.rstrip("/") for p in root_matches):
+        dirs = [{"name": p.name, "path": str(p), "is_dataset": False, "is_recording": False}
+                for p in root_matches if p.is_dir()]
+        return {"path": "", "parent": None, "dirs": dirs, "directories": dirs,
+                "query": raw, "exact": False, "prefix": raw}
+    candidate = validate_path(raw, roots, must_exist=False)
+    if candidate.is_dir():
+        return {**browse_directory(candidate, roots), "query": raw, "exact": True, "prefix": ""}
+    parent = validate_path(Path(raw).expanduser().parent, roots)
+    result = browse_directory(parent, roots)
+    prefix = Path(raw).name
+    dirs = [item for item in result["dirs"] if item["name"].casefold().startswith(prefix.casefold())]
+    return {**result, "dirs": dirs, "directories": dirs, "query": raw, "exact": False, "prefix": prefix}
+
+
+def create_directory(parent: str, name: str, roots) -> Path:
+    """Create one visible child directory, exclusively, outside recorded data.
+
+    This creates an output *parent*. Final dataset names remain uncreated until
+    validated publication. No existing directory is replaced or emptied.
+    """
+    if (not name.strip() or name != name.strip() or name.startswith(".")
+            or any(char in name for char in "/\\") or any(ord(char) < 32 for char in name)):
+        raise ValueError("目录名不可为空、以点开头或包含路径分隔符/控制字符")
+    current = validate_path(parent, roots)
+    if not current.is_dir():
+        raise ValueError("父路径必须是已有目录")
+    for ancestor in (current, *current.parents):
+        if any((ancestor / marker).exists() for marker in (
+                "meta/info.json", "data/metadata.yaml", "tianji-cache.json")):
+            raise ValueError("不能在原始录制、准备缓存或已有数据集内部新建目录")
+    target = validate_path(current / name, roots, must_exist=False)
+    if os.path.lexists(current / name):
+        raise FileExistsError("同名文件或目录已存在")
+    target.mkdir(mode=0o755)
+    return target

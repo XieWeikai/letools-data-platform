@@ -1,0 +1,98 @@
+"""Reviewed parameter explanations, independent of the unchanged raw reports.
+
+Every supported TianjiConfig field is represented in the workbench. Execution
+options and fixed/internal Source controls are explicitly distinguished; the
+browser never offers a switch which silently weakens fused conversion checks.
+"""
+
+WORKBENCH = {
+    "provider": "选择处理原始格式的插件，列表来自本服务的专用 LeTools 环境。目前 Web 录制流程只支持 Tianji；更换 provider 需要重新加载轨迹，不会更改目标 LeRobot 版本。",
+    "source-root": "服务器上的原始录制目录或录制父目录，不是浏览器所在电脑的路径。输入时匹配已有目录；选中后仍需加载录制。此路径决定待选轨迹，文件只读，不自动上传、删除或修复。",
+    "recording-filter": "按录制名称筛选可见列表，不做质量检查，也不改变已经勾选的轨迹。全选筛选结果只选择匹配项；实际检查范围以已选数量为准。",
+    "task": "必填的任务文本，原样写入每条输出 episode 的 task。同次转换共享这一指令；它不参与信号对齐、运动判断或异常筛选。要逐条修改任务可在转换后使用 Editor。",
+    "fps": "主数据行与输出视频的采样频率，1–1000 Hz，默认50。改变它会改变时间网格、输出行数与对齐检查落点；提高FPS不会创造新曝光。wrench_fps必须不低于它且为它的整数倍。",
+    "wrench-fps": "力/力矩的目标取样频率，1–1000 Hz，默认200，必须≥主FPS且为其整数倍。每行保存[wrench_fps/FPS,12]窗口，默认[4,12]，末点对应主帧。取过去最近真实样本，不滤波、平均或插值；窗口内每点检查缺口。提高会增大字段与检查量，降低可能遗漏短峰；需重新生成缓存。",
+    "target-version": "选择输出物理格式：v2.1按episode存放文件，v3.0采用分片与切片索引。相同provider配置下信号对齐含义不变；请按训练代码支持的版本选择。",
+    "destination": "最终数据集在服务器上的全新绝对路径，必须与输入分离。输入可匹配目录，选择父目录后填写新数据集名；不要提前创建最终目标。仅在输出验证通过后发布；检查或运行失败不会覆盖已有目录。",
+    "max-gap-ms": "默认100ms，范围(0,1000]。限制真实反馈相邻样本的间隔，以及输出时刻到最近过去视频帧的年龄。wrench窗口内部也逐点检查。提高可允许更长插值或更旧画面，可能掩盖采集缺失；降低会更严格。与控制命令是否暂停不同，不补造整段缺失观测。",
+    "command-max-age-ms": "关节命令有效期，默认100ms。每只臂取不晚于输出时刻的最后目标；年龄≤阈值就保持，过期或无命令时该臂action用同帧关节state。调大保留旧目标更久，调小更早补反馈，会改变训练action和命令覆盖边界。至少一路关节/夹爪控制仍须有效。",
+    "gripper-max-gap-ms": "夹爪控制目标有效期，默认150ms，规则与关节命令一致。过期或缺失时补该帧对应归一化夹爪state。它不放宽夹爪反馈缺口；反馈仍受观测最大间隔控制。调节会改变夹爪action和全路命令覆盖。",
+    "state-resampling": "lowpass在有效连续段内抗混叠低通后采样；linear仅插值，可能保留快变化也可能混叠。作用于关节、夹爪反馈和EEF平移；EEF旋转用SLERP，wrench不滤波，命令和视频取过去样本。两者都不跨拒绝的观测缺口。离线处理可能用未来观测，补state的action也会随之变化。",
+    "trim-stationary": "默认开启，只裁开头和结尾，所有字段和相机统一裁剪，中间暂停保留，不拆episode。按首尾200ms中位姿态判断累计位移，不是逐帧速度。整条无可辨认运动或保留不足两帧会拒绝；关闭可保留静止示例，但不豁免观测缺口或控制覆盖检查。",
+    "motion-joint-threshold-rad": "默认0.002rad（约0.115°），任一关节相对首/尾中位姿态的位移严格超过该值即算运动。越大越可能裁掉小动作，越小越容易保留噪声。只影响首尾裁剪，不是安全限位或速度阈值；关闭裁剪时不参与活动判断。",
+    "motion-gripper-threshold": "默认0.01，表示按录制标定归一化的电机行程1%，不是弧度或毫米。任一夹爪偏离首尾姿态超过阈值即可判定活动；越大越可能裁去细小开合，越小越受噪声影响。关闭裁剪时不参与活动判断。",
+    "gap-policy": "Tianji目前唯一合法值error。真实观测缺口按规则拒绝该录制，不提供split、ignore或伪造观测。Web只转换通过项，是选择哪些录制输出，不是放宽这条质量规则。",
+    "preset": "目前唯一经过验证的thor-v1：固定topic、坐标系、夹爪标定和字段定义。不是可任意改名的机器人配置；其他数采系统需新增/修改provider，不能通过下拉字符串自动适配。",
+    "provider-workers": "检查/融合准备的录制进程并发，留空自动：可用CPU数减2、至少1、最多12，且不超过录制数。Web显式允许1–64，NVENC仍最多12条同时编码。增大会占更多内存/CPU/编码会话，不改变采样、检查阈值或输出顺序；与下方LeTools封装workers不同。",
+    "video-encoder": "只作用于转换的provider准备阶段。auto先独立探测NVENC，不可用才回退x264；libx264使用CPU CRF18/veryfast；h264_nvenc要求硬件可用，使用CQ16/p4/HQ/Main。均保留原尺寸与50Hz等所设FPS，H.264/yuv420p。CQ与CRF不同，硬件配方通常更快但文件更大；编码运行故障停止任务，不静默换配方。",
+    "deep-video": "仅影响“仅检查”：开启会完整解码视频，验证尾部坏帧、数量、映射和尺寸；关闭只解码首帧，仍检查消息时间戳/结构，但不能保证后续视频健康。“检查并转换通过项”始终完整解码，与这个开关无关，之前快速检查通过不能免除完整检查。",
+    "prepare-valid-only": "平台固定开启。所有选中录制都检查，异常项逐条报告后跳过，episode重新连续编号；全异常无输出。磁盘、编码器故障和源变化不作为普通异常跳过。这个开关只决定录制选择，不改变单条信号规则。",
+    "collect-image-stats": "当前融合准备固定计算编码前全部选中像素的图像统计，后端用于归一化元数据。TianjiSource的内部_collect_image_stats仅供直接原始源调试/inspect使用；在当前缓存路线不能关闭，否则统计契约不完整。",
+    "source-workers": "TianjiSource的内部_workers只控制直接读取原始source时的并发。此平台先由provider检查准备，再打开缓存source，因此这个内部选项不参与当前转换；请调provider workers，而不是设置无效的内部参数。",
+    "report-location": "report、cache destination和progress callback由平台按任务ID管理。报告可在结果区下载，缓存位于私有任务目录；不能填写路径覆盖原录制。Source的root/config分别来自所选目录和本表参数。",
+    "workers": "LeTools生成目标表格阶段的并发，默认2，Web范围1–8。不控制provider检查/准备，也不改变信号频率或质量规则。调高可能提升吞吐，也会增加CPU/内存竞争。",
+    "video-workers": "LeTools输出媒体任务并发，默认4，Web范围1–8。当前准备好的H.264直接复用，不用它重新决定CQ/CRF；不控制provider的编码进程数。",
+    "dataset-path": "登记已存在的LeRobot v2.1/v3.0目录，要求完整metadata、表格和引用视频。只登记路径，不复制文件；移除卡片只取消登记，可用同一路径重新添加。",
+    "folder-path": "实时浏览服务器已有目录。输入完整目录显示子目录；末段只输入一部分时显示名称前缀匹配项。选择匹配项进入，路径越界或不可读会提示，不自动改写输入。",
+    "folder-name": "在当前父目录下预留一个尚不存在的最终数据集名称。这里只填单个名称，不含斜杠；实际目录在转换发布时创建。上面的新建目录用于建立分类父目录。",
+    "folder-create-name": "在当前已经进入的目录下立即创建一个分类子目录，然后进入它。不会覆盖同名文件，也不允许在原始录制/已有数据集内部建目录。最终数据集名称在下方另填，避免目标已存在。",
+}
+
+DOCTOR = {
+    "dataset": "已登记数据集的ID或local/ID；检查/评分读取这份转换后数据，不检查原始MCAP。fix/trim也先读它，但只处理新副本。",
+    "operation": "check诊断、score逐轨迹评分、gate训练准入、merge-check合并预检、fix修副本、trim同步裁剪。前四项只读；后两项要求新目录和明确确认。质量失败不等于程序崩溃。",
+    "max_episodes": "留空检查全部，正整数仅加载前面指定数量的episode。影响check和score的诊断范围与耗时，不改变原数据，不代表未检查部分也正常。完整12项报告按钮始终检查全部，不使用此限制。",
+    "urdf": "可选的服务器URDF文件，用于运动学检查的关节限制等。未提供且机器人不在内置注册表时该项跳过，不代表完成了机器人运动学验证；不控制硬件。",
+    "fail_on": "后台check任务的失败门槛：fail只在FAIL时失败，warn在WARN或FAIL时失败。不会把警告变为错误、修改数据或改变检查算法。直接读取完整报告仍返回原始严重级别。",
+    "drop_threshold": "score的建议丢弃分数线，默认30，0–100。低于阈值标记复核/丢弃建议，不会自动删除episode或改写数据；评分只是算法指标，需结合任务。",
+    "policy": "gate使用的训练策略模板：ACT、Diffusion、SmolVLA或Pi0。决定最低长度、图像/状态/action等准入要求，不会训练模型，也不保证策略效果。",
+    "chunk_size": "可选正整数，覆盖gate使用的动作chunk长度要求。过大可能使短episode不满足门槛；只影响检查判定，不重采样、补帧或切分轨迹。",
+    "datasets": "merge-check所用的已登记数据集ID，每行一个，默认至少两个不同数据集。检查字段、频率与布局兼容性，不执行实际合并，也不复制文件。",
+    "post_merge": "开启后检查一个已经合并的数据集，datasets必须只有一个ID；关闭则比较两个及以上输入的合并兼容性。两种模式都只读。",
+    "output": "fix/trim的全新输出绝对路径，须与所有输入分离。只操作副本，不允许覆盖原目录。不要提前创建最终输出；失败副本保留未完成标记供排查。",
+    "confirm": "明确确认fix/trim只创建新的输出。未勾选不会提交这些修改操作；这不是允许修改或覆盖原始数据集。",
+    "dry_run": "trim开启时只给裁剪计划、不创建输出；fix开启时仍建立独立副本，但不执行修复。两者都不修改原数据，含义不同。",
+    "threshold": "Doctor trim活动阈值，默认0.01、非负。按state/action任一分量相邻帧变化判断，采用各字段原始单位；越大越易裁去小动作。它不同于Tianji原始转换的端点位移阈值，影响新副本的帧范围。",
+    "min_active": "trim至少需要的活动帧数，默认10、正整数。活动不足的episode默认不进入新输出；keep_static开启则保留。数值越大，对低活动示例更严格。",
+    "keep_static": "trim中保留静止或活动帧不足的episode；关闭时可能从新输出剔除这些episode。不会删除原数据，也不会补造视频/观测。",
+}
+CHECK_HELP = {
+    "metadata": "核对格式版本、必需metadata和声明数量。缺失或不一致可能让下游无法读取；不自动修复。",
+    "temporal": "检查帧索引、时间戳单调性及与FPS的关系。发现不连续可能表示丢帧或错误重编号；不会自动改变时间轴。",
+    "actions": "检查action数值、常值/冻结、边界集中和跳变。Tianji使用只读observation.action别名；单臂静止可能是正常任务，需要复核。",
+    "videos": "检查声明相机和视频文件完整性；不是机器人任务成功检测，也不能替代provider的原始视频对齐检查。",
+    "statistics": "检查数值分布、NaN/Inf、零方差和统计文件。常值维度需结合任务；没有聚合stats.json不等于没有逐episode统计。",
+    "episodes": "核对episode长度与metadata，报告短轨迹/长度分布等问题，不会自动删除。",
+    "consistency": "比较各episode字段、数据类型/布局的一致性，不一致可能影响训练batch拼接。",
+    "training": "检查action/state/图像和归一化统计等训练前置条件；通过不保证实际训练效果。",
+    "anomalies": "检查数据中异常分布、全程常值等信号；常值既可能是未动的手，也可能是传感器卡住，需要看视频和任务。",
+    "portability": "检查数据可迁移性、体积等问题；只读，不复制到另一台机器或上传。",
+    "per_episode": "逐episode汇总时序、长度与动作异常，帮助定位应复核的轨迹；不自动移除。",
+    "kinematics": "结合URDF/内置机器人定义检查运动学可行性。没有匹配定义会跳过，不承诺物理安全或硬件验证。",
+}
+FIX_HELP = {
+    "reindex": "在新副本重建连续索引；不能恢复缺失样本。",
+    "timestamps": "在新副本按上游修复规则规范化时间戳；无法找回真实采集时钟，使用前核对问题。",
+    "nan": "在新副本按上游规则处理NaN值；填补不等于真实观测，需复核训练适用性。",
+    "metadata": "修正新副本的声明metadata，保留原数据；不能通过改metadata修复实际坏视频。",
+    "episodes": "修正新副本episode元数据；完成后仍执行输出验证，原始文件不变。",
+}
+EDITOR = {
+    "editor-dataset": "选择已登记的数据集。编辑保持该输入版本和FPS，原episode ID用于指定修改。",
+    "bulk-task": "将文本赋给所选原episode ID，需点击设置所选task才加入计划；不改变帧数或信号值。",
+    "task-json": "JSON对象：键是原episode ID，值是任务文本。合并后仍需预览再执行，不能对待删除episode同时改task。",
+    "video-enabled": "开启后对所选保留相机重新编码/缩放，会改变视频像素与体积；关闭尽量复用码流。删除v3内部episode也可能需要转码，以计划为准。",
+    "video-codec": "H.264适合通用播放且文件较小，MJPEG逐帧编码通常更大。只影响视频，数值和FPS保持。",
+    "video-width": "与高度同时填写或同时留空；留空保留原尺寸。精确缩放可能改变长宽比，420格式需偶数宽高，不能恢复原视频没有的细节。",
+    "video-height": "与宽度同时填写或同时留空。新尺寸只影响所选相机，不改变帧数、FPS和数值信号。",
+    "video-crf": "H.264质量参数，默认23，0–51。越低通常质量越高、体积越大；不是provider的NVENC CQ，不能直接按数字等价。",
+    "video-preset": "x264编码速度/压缩效率选择，默认veryfast。更慢通常更耗CPU而压缩更充分；不改变采样时序。",
+    "video-quality": "MJPEG质量参数，默认2，1–31，越低通常越清晰越大。仅MJPEG有效，不与H.264 CRF混用。",
+    "pixel-format": "视频像素/色度采样格式，默认由编码器选择。420兼容性较好，422/444可能增加体积且设备支持不同，必须符合尺寸约束。",
+    "editor-output": "全新且与输入分离的服务器路径；预览不创建数据集，执行验证通过后发布。自定义sidecar和原Annotation不会复制，原数据保留。",
+    "editor-workers": "文件处理并发，留空自动，显式1–8。提高会增加CPU/内存竞争；实际计划显示采用值，不改变编辑内容。",
+    "codec-threads": "每个视频编码器的线程数，留空自动，显式1–8。与workers相乘决定资源占用；不改变目标FPS。",
+    "batch-rows": "Parquet每批处理行数，默认65536。较大批次占更多内存，较小可能增加调用开销；不改变输出采样率或字段值。",
+    "browse-path": WORKBENCH["folder-path"], "output-name": WORKBENCH["folder-name"],
+    "output-create-name": WORKBENCH["folder-create-name"],
+}

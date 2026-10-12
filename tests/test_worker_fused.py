@@ -93,10 +93,11 @@ def scenario(tmp_path, monkeypatch):
     monkeypatch.setattr(worker.os, "nice", lambda _: None)
     monkeypatch.setattr(worker, "emit", lambda event, **values: state.events.append({"event": event, **values}))
 
-    def independent_check(selected, config, *, deep_video, progress):
+    def independent_check(selected, config, *, deep_video, progress, workers=None):
         state.calls.append("check")
         state.configs.append(config)
-        assert selected == job / "selected" and deep_video is True
+        assert selected == job / "selected" and deep_video is state.request.get("deep_video", True)
+        state.check_workers = workers
         assert sorted(path.resolve() for path in selected.iterdir()) == sorted(roots)
         for index, item in enumerate(state.report["results"], 1):
             progress(index, len(roots), item)
@@ -265,6 +266,23 @@ def test_missing_raw_duration_is_unknown_not_zero(scenario):
     summary = [e["result"] for e in scenario.events if e["event"] == "result"][0]["conversion_summary"]
     assert summary["input"] == {"episodes": 2, "duration_seconds": None,
                                 "known_duration_seconds": 2, "unknown_duration_episodes": 1}
+
+
+def test_provider_execution_controls_reach_fused_and_check_paths(scenario):
+    state = scenario
+    state.request.update(provider_workers=3, video_encoder="libx264", deep_video=False)
+    state.request["params"]["wrench_fps"] = 400
+    worker.run(state.save())
+    assert state.fused_kwargs["workers"] == 3
+    assert state.fused_kwargs["video_encoder"] == "libx264"
+    assert "deep_video" not in state.fused_kwargs  # Fused API always fully decodes.
+    assert state.configs[0].wrench_fps == 400
+
+
+def test_fast_check_uses_requested_workers_and_does_not_prepare(scenario):
+    scenario.request.update(kind="check", deep_video=False, provider_workers=2)
+    worker.run(scenario.save())
+    assert scenario.check_workers == 2 and scenario.calls == ["check"]
 
 
 def test_source_changes_during_conversion_prevent_publication(scenario):

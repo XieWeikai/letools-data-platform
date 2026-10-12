@@ -145,6 +145,33 @@ class DatasetRegistry:
                 return {**record, "path": str(root), "info": info}
         raise KeyError(f"尚未注册的数据集: {identity}")
 
+    def unregister(self, identities: list[str]) -> list[str]:
+        """Remove registry references only; never open/delete dataset files.
+
+        Uses the same interprocess lock as register. Repeating a removal is
+        harmless and stale/unavailable datasets can also be unregistered.
+        Re-registering their original path restores access with the same ID.
+        """
+        selected = set(identities)
+        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with (self.path.parent / "datasets.lock").open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            records = self._read()
+            removed = [item["id"] for item in records
+                       if item["id"] in selected or item["repo_id"] in selected]
+            remaining = [item for item in records if item["id"] not in removed]
+            descriptor, temporary = tempfile.mkstemp(prefix="datasets-", suffix=".json", dir=self.path.parent)
+            try:
+                with os.fdopen(descriptor, "w") as stream:
+                    json.dump(remaining, stream, ensure_ascii=False, indent=2)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(temporary, self.path)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+        return removed
+
     def all(self) -> list[dict]:
         result = []
         for record in self._read():

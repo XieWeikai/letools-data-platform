@@ -212,6 +212,10 @@ def test_action_checks_match_canonical_commands_not_other_observations(tmp_path)
     actual = run_check(root, checks=selected)
     for item in actual["checks"]:
         item["messages"] = [message for message in item["messages"] if message["message"] != ALIAS_MESSAGE]
+        for message in item["messages"]:
+            if message["severity"] != "PASS":
+                assert message["explanation"]["meaning"]
+                message.pop("explanation")  # Added UI help must not alter upstream evidence.
     assert actual["checks"] == expected["checks"]
 
 

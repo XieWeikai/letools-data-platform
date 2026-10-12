@@ -167,6 +167,8 @@ class JobManager:
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.records = {}
+        self.hidden_path = config.state_dir / "hidden-jobs.json"
+        self.hidden = set(json.loads(self.hidden_path.read_text())) if self.hidden_path.exists() else set()
         self.pending = queue.Queue()
         self.processes = {}
         self.process_groups = {}
@@ -256,7 +258,28 @@ class JobManager:
 
     def all(self):
         with self.lock:
-            return [self.get(k) for k in reversed(list(self.records))]
+            return [self.get(k) for k in reversed(list(self.records)) if k not in self.hidden]
+
+    def clear_history(self, identities):
+        """Hide terminal jobs durably, retaining reports/caches and plan IDs.
+
+        Do not clear running/queued jobs or a cancelled process still exiting.
+        Validate the complete selection before writing one atomic tombstone
+        file; a mixed active/terminal selection therefore has no partial effect.
+        Direct report access remains available for audit and editor plan checks.
+        """
+        with self.lock:
+            selected = set(identities)
+            unknown = selected - self.records.keys()
+            if unknown:
+                raise ValueError("部分任务记录不存在，请刷新列表")
+            if any(self.records[key]["status"] not in TERMINAL or key in self.processes
+                   or key in self.started_monotonic for key in selected):
+                raise ValueError("运行中或排队中的任务不能清除；取消后须等待进程退出")
+            hidden = self.hidden | selected
+            atomic_json(self.hidden_path, sorted(hidden))
+            self.hidden = hidden
+            return sorted(selected)
 
     def cancel(self, job_id):
         with self.lock:

@@ -1,0 +1,13 @@
+.parameter-label { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
+.parameter-label > label { margin-bottom: 0; }
+.field > .parameter-label { margin-bottom: 7px; }
+.parameter-help { display: inline-flex; flex: 0 0 23px; align-items: center; justify-content: center; width: 23px; height: 23px; padding: 0; border: 1px solid #c5cdd8; border-radius: 50%; background: #f1f5f9; color: #526276; font: 600 13px/1 system-ui; cursor: help; }
+.parameter-help:hover, .parameter-help:focus-visible { background: #dbeafe; color: #1e40af; outline: 2px solid #60a5fa; outline-offset: 2px; }
+.parameter-help-popup { position: fixed; z-index: 9999; box-sizing: border-box; width: 410px; max-width: calc(100vw - 24px); max-height: min(400px, 80vh); overflow: auto; padding: 14px 16px; color: #172338; background: #f8fafc; border: 1px solid #aebbd0; border-radius: 9px; box-shadow: 0 8px 28px #0f172a30; font: 14px/1.7 system-ui; text-align: left; white-space: normal; }
+.parameter-help-popup[hidden] { display: none; }
+.diagnostic-explanation { padding: 11px 13px; margin: 8px 0; background: #eff6ff; color: #1e3a5f; border-left: 3px solid #93b4e9; border-radius: 5px; font-size: 13px; line-height: 1.65; }
+.diagnostic-explanation p { margin: 6px 0 0; }
+.diagnostic-explanation strong { font-size: 14px; }
+.diagnostic-explanation + details { margin: 8px 0; }
+#doctor-explanations section { margin: 14px 0; padding: 12px; border: 1px solid #53637d; border-radius: 8px; }
+#doctor-explanations h3 { font-size: 16px; }
