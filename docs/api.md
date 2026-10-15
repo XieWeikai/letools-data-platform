@@ -77,7 +77,7 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 | POST `/api/raw/open` | `{"path":"/absolute/saved/recording"}`；202 返回指纹 id、queued/running/ready，ready 含 manifest；队列满429 |
 | GET `/api/raw/{id}` | 状态、真实消息读取数量或完成清单；源已变化409；中断索引标记 interrupted，可重新 open |
 | GET `/api/raw/{id}/series` | topic=清单中的 topic-NNN、重复 fields、clock=record/header、start/end（相对秒）、limit=100–5000；返回真实选点、值和原始缺口 breaks |
-| GET `/api/raw/{id}/samples` | 重复 topics（最多32）、clock、at（相对秒）；完整索引中游标之前最近的原始消息、时间与年龄；不做插值 |
+| GET `/api/raw/{id}/samples` | 重复 topics（最多32）、clock、at（相对秒）；完整索引中游标之前最近的原始消息、时间与年龄；不做插值。record_ns 是接收时间，header_or_record_ns 是 Header 模式实际采用的 Header 或回退时间，原 Header 在 sample 中 |
 | GET `/api/raw/{id}/video/{record或header}` | 按对应真实时钟封装的原始四宫格 MP4，支持 HTTP Range；不可用404 |
 
 清单公开两种时钟 origin_ns（十进制字符串防止 JS 精度损失）及 duration、topic 字段/计数/时序诊断、相机布局和视频时间。所有源路径使用同一根目录白名单并约束 MCAP 必须在录制内；每次数据/媒体访问复核源指纹。原始查看不产生转换任务、不改变 check 规则，详见[原始查看器](raw-viewer.md)。

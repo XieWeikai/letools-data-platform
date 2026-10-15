@@ -12,6 +12,8 @@
 
 验收根目录：Marvin `.state/raw-viewer-dev-20261015-PkdRLe/`。包含两条实录的 `acceptance.json`、日志和隔离state；原始录制、视频、截图、缓存和日志不提交Git。LeTools核心与Tianji provider保持原提交不变。
 
+同日安装到原 `letools-tianji/.venv` 并部署8095：正式 API 再次打开上述两条，全部870帧像素/时间及Range验收通过，含首次索引的两个验收过程分别26.98/27.99秒。线上浏览器实际打开并播放，四路画面和细竖线同步，未捕获新的JavaScript错误。部署前后全局LeTools命令、全局provider配置及数据集登记的SHA256相同；两依赖仓库的提交和工作区状态未变。
+
 ## 0.4.1：NVENC 运行故障恢复（2026-10-12）
 
 配合 provider 0.6.3，auto 在硬件 codec 资源故障后整批重试软件一次。平台根据 completed 索引替换临时检查结果，并用最终完整报告覆盖列表，避免重试后重复计算轨迹；参数帮助和静态脚本版本更新。

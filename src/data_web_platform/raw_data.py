@@ -392,6 +392,6 @@ def samples(cache, manifest, topics, clock, at):
                 result.append({"id": token, "sample": None})
             else:
                 result.append({"id": token, "time": (row[0] - origin) / 1e9, "age_ms": (timestamp - row[0]) / 1e6,
-                    "record_ns": str(row[1]), "header_ns": str(row[2]), "sample": json.loads(row[3]),
+                    "record_ns": str(row[1]), "header_or_record_ns": str(row[2]), "sample": json.loads(row[3]),
                     "outside": at > (topic["clocks"][clock]["end"] or 0)})
     return result
