@@ -16,6 +16,15 @@ from test_paths import make_dataset
 from test_jobs import manager
 
 
+def test_published_directory_link_keeps_user_facing_name(tmp_path):
+    physical=make_dataset(tmp_path/".published.dwp-storage"/"dataset")
+    public=tmp_path/"my_dataset";public.symlink_to(physical,target_is_directory=True)
+    registry=DatasetRegistry(SimpleNamespace(state_dir=tmp_path/"state",allowed_roots=[tmp_path]))
+    record=registry.register(public)
+    assert record['name']=='my_dataset' and record['path']==str(physical.resolve())
+    assert registry.get(record['id'])['name']=='my_dataset'
+
+
 def test_unregister_batch_is_reference_only_and_reversible(tmp_path):
     paths = [make_dataset(tmp_path / name) for name in ("one", "two", "three")]
     registry = DatasetRegistry(SimpleNamespace(state_dir=tmp_path / "state", allowed_roots=[tmp_path]))

@@ -119,7 +119,7 @@ class DatasetRegistry:
         slug = re.sub(r"[^a-z0-9_-]+", "-", root.name.lower()).strip("-")[:60] or "dataset"
         identity = f"{slug}-{hashlib.sha256(str(root).encode()).hexdigest()[:12]}"
         record = {"id": identity, "repo_id": f"local/{identity}", "path": str(root),
-                  "name": root.name, "info": info}
+                  "name": Path(path).expanduser().name, "info": info}
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with (self.path.parent / "datasets.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
