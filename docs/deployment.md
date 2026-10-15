@@ -4,7 +4,7 @@
 
 0.5.0 原始查看器使用同一私有环境中的 MCAP、NumPy、PyAV 和 Tianji schema 编译器，无需新前端构建或 GPU。衍生缓存位于 `.state/raw-viewer`，单进程后台索引与转换队列独立，服务关闭时停止其自有索引进程；源文件变化会使缓存失效。部署前也应检查是否有人正在建立原始预览，避免中断其首次索引。无须重建 LeRobot Viewer 缓存；重启后刷新页面加载 0.5.0 静态脚本。
 
-0.5.1 的 NFS 发布兼容：NFS4 可能允许读写却不支持 renameat2 的 RENAME_NOREPLACE，原版会在验证结束后报 EINVAL。现在以原子且不覆盖的目录符号链接发布，已验证的隐藏存储保留。备份时同时保留公开链接和其同级 `.名称.dwp-*`，或跟随链接复制数据；不要批量删除这些隐藏目录。平台内核仍需要Linux，非Linux部署不在承诺范围。该变更不修改NFS挂载、NAS权限或用户映射。
+0.5.2 的 NFS 发布兼容：NFS4 可能允许读写却不支持 renameat2 的 RENAME_NOREPLACE，原版会在验证结束后报 EINVAL。现在排他创建真实目标目录，保留 `.dwp-incomplete` 到文件全部就绪；普通文件优先硬链接、否则排他复制，meta/info.json最后写入，不使用符号链接。成功后删除本次暂存，最终目录可独立复制和使用；失败保留完整源和带标记的部分目标供排查。此分支不是原子目录改名；平台拒绝未完成标记，外部程序应在任务成功后再读。旧0.5.1符号链接仍需显式迁移。平台内核仍需要Linux，该变更不修改NFS挂载、NAS权限或用户映射。
 
 Marvin NAS 访问采用该服务的 systemd drop-in：`~/.config/systemd/user/data-web-platform.service.d/30-nas-tianji.conf`，设置 `DWP_ALLOWED_ROOTS=/home/user:/media/user/BAG_STORAGE:/nas/tianji`。该主机配置保留旧白名单并仅增加指定 NAS 子树，不将整个 `/nas` 开放。
 

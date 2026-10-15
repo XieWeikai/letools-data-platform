@@ -2,9 +2,9 @@
 
 为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-**当前平台版本：0.5.1；文档核验日期：2026-10-15。** 配套 Tianji provider 0.6.3、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+**当前平台版本：0.5.2；文档核验日期：2026-10-15。** 配套 Tianji provider 0.6.3、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
 
-0.5.1 兼容 NFS 不支持 `renameat2(RENAME_NOREPLACE)` 的情况：本地支持时仍原子改名；不支持时用排他创建的相对目录链接发布已完成的数据，仍不覆盖同名文件/目录。链接指向的同级隐藏 `.名称.dwp-随机串/dataset` 是正式数据存储，必须与链接一起保留和备份，不能作为临时缓存删除。数据集卡片保留用户指定名称。
+0.5.2 的所有新输出使用真实目录，不创建目录符号链接。支持 `renameat2(RENAME_NOREPLACE)` 时仍原子改名；不支持的NFS上排他创建目标目录，以普通文件硬链接（不支持时排他复制）填充，最后写入 `meta/info.json` 并移除 `.dwp-incomplete`。完成前平台拒绝读取，成功后清理暂存，最终目录无需隐藏存储依赖。这个NFS分支不是单步原子改名，失败时保留源和带标记的未完成目标，不能将其当作成功输出。旧0.5.1链接需显式迁移，不能直接删除其存储。
 
 0.5.0 新增“原始数据”标签页（`/#raw`）：选择一条 MCAP 录制，自选 topic/字段、查看四路原始相机，并沿统一时间轴播放、逐帧、跳转和缩放。曲线细竖线跟随播放；原始 topic 不裁剪、不归一化、不补 action。默认 MCAP 记录时间，可切换 Header（缺失时用记录时间），完整保留各信号的开始/结束差异。详见 [原始查看器指南](docs/raw-viewer.md)。
 

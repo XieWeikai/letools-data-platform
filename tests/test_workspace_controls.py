@@ -25,6 +25,16 @@ def test_published_directory_link_keeps_user_facing_name(tmp_path):
     assert registry.get(record['id'])['name']=='my_dataset'
 
 
+def test_reregister_migrated_directory_preserves_public_id(tmp_path):
+    root=make_dataset(tmp_path/'real-dataset')
+    registry=DatasetRegistry(SimpleNamespace(state_dir=tmp_path/'state',allowed_roots=[tmp_path]))
+    record=registry.register(root)
+    record.update(id='preserved-id',repo_id='local/preserved-id')
+    registry.path.write_text(json.dumps([record]))
+    assert registry.register(root)['id']=='preserved-id'
+    assert len(registry.all())==1
+
+
 def test_unregister_batch_is_reference_only_and_reversible(tmp_path):
     paths = [make_dataset(tmp_path / name) for name in ("one", "two", "three")]
     registry = DatasetRegistry(SimpleNamespace(state_dir=tmp_path / "state", allowed_roots=[tmp_path]))

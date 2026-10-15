@@ -49,7 +49,7 @@ def test_atomic_publish_never_replaces_concurrent_output(tmp_path, collision):
 
 @pytest.mark.parametrize("number", [errno.EINVAL, errno.EOPNOTSUPP, errno.ENOSYS])
 @pytest.mark.parametrize("collision", [None, "dir", "file", "dangling-link"])
-def test_unsupported_rename_publishes_complete_link_without_overwrite(tmp_path, monkeypatch, number, collision):
+def test_unsupported_rename_publishes_real_directory_without_overwrite(tmp_path, monkeypatch, number, collision):
     import data_web_platform.publishing as publishing
     class Rename:
         def __call__(self,*args):
@@ -67,10 +67,11 @@ def test_unsupported_rename_publishes_complete_link_without_overwrite(tmp_path, 
         if collision=="dangling-link":assert destination.readlink().as_posix()=="missing"
     else:
         publish_noreplace(staging,destination)
-        assert destination.is_symlink() and destination.resolve()==staging
+        assert destination.is_dir() and not destination.is_symlink()
         assert (destination/"data.txt").read_text()=="verified"
-        assert not destination.readlink().is_absolute()
-    assert (staging/"data.txt").read_text()=="verified"
+        assert not staging.parent.exists()
+        assert not (destination/'.dwp-incomplete').exists()
+    if collision:assert (staging/"data.txt").read_text()=="verified"
 
 
 def test_permission_failure_does_not_switch_to_link(tmp_path,monkeypatch):
@@ -91,3 +92,47 @@ def test_fallback_refuses_unmanaged_source(tmp_path,monkeypatch):
     source=tmp_path/"unmanaged";source.mkdir()
     with pytest.raises(RuntimeError,match="受管理目录"):publish_noreplace(source,tmp_path/"output")
     assert source.is_dir()
+
+
+def test_real_directory_failure_keeps_source_and_marker_and_no_info(tmp_path,monkeypatch):
+    import data_web_platform.publishing as p
+    class Rename:
+        def __call__(self,*args):ctypes.set_errno(errno.EINVAL);return -1
+    monkeypatch.setattr(p.ctypes,'CDLL',lambda *a,**k:SimpleNamespace(renameat2=Rename()))
+    destination=tmp_path/'output';source=new_staging(destination);(source/'meta').mkdir(parents=True)
+    (source/'meta/info.json').write_text('{"proof":true}')
+    (source/'data.bin').write_bytes(b'original')
+    def fail(*args):raise OSError(errno.ENOSPC,'disk full')
+    monkeypatch.setattr(p,'_link_or_copy',fail)
+    with pytest.raises(OSError,match='disk full'):publish_noreplace(source,destination)
+    assert (source/'data.bin').read_bytes()==b'original'
+    assert (destination/'.dwp-incomplete').exists()
+    assert not (destination/'meta/info.json').exists()
+
+
+def test_real_directory_info_is_last_and_files_share_then_keep_original_inode(tmp_path,monkeypatch):
+    import data_web_platform.publishing as p
+    class Rename:
+        def __call__(self,*args):ctypes.set_errno(errno.EINVAL);return -1
+    monkeypatch.setattr(p.ctypes,'CDLL',lambda *a,**k:SimpleNamespace(renameat2=Rename()))
+    destination=tmp_path/'output';source=new_staging(destination);(source/'meta').mkdir(parents=True)
+    (source/'meta/info.json').write_text('{}');(source/'data.bin').write_bytes(b'verified')
+    inode=(source/'data.bin').stat().st_ino;calls=[];original=p._link_or_copy
+    def inspect(src,dst):
+        assert (destination/'.dwp-incomplete').exists()
+        if src.name=='info.json':assert (destination/'data.bin').read_bytes()==b'verified'
+        calls.append(src.name);original(src,dst)
+    monkeypatch.setattr(p,'_link_or_copy',inspect)
+    publish_noreplace(source,destination)
+    assert calls[-1]=='info.json' and (destination/'data.bin').stat().st_ino==inode
+    assert not source.parent.exists() and not any(v.is_symlink() for v in destination.rglob('*'))
+
+
+def test_link_fallback_copies_exclusively(tmp_path,monkeypatch):
+    import data_web_platform.publishing as p
+    source=tmp_path/'source';source.write_bytes(b'original bytes')
+    def unsupported(*a,**kw):raise OSError(errno.EOPNOTSUPP,'links unsupported')
+    monkeypatch.setattr(p.os,'link',unsupported)
+    dest=tmp_path/'destination';p._link_or_copy(source,dest)
+    assert dest.read_bytes()==source.read_bytes() and not dest.is_symlink()
+    with pytest.raises(FileExistsError):p._link_or_copy(source,dest)

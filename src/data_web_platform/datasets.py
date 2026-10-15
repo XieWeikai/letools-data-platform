@@ -123,7 +123,14 @@ class DatasetRegistry:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with (self.path.parent / "datasets.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            records = [item for item in self._read() if item["id"] != identity]
+            records = self._read()
+            # A deliberate physical-directory migration can preserve the old
+            # public ID. Re-registering its new path must reuse that identity.
+            existing = next((item for item in records if item["path"] == str(root)), None)
+            if existing is not None:
+                identity = existing["id"]
+                record.update(id=identity, repo_id=existing["repo_id"])
+            records = [item for item in records if item["id"] != identity]
             records.append(record)
             descriptor, temporary = tempfile.mkstemp(prefix="datasets-", suffix=".json", dir=self.path.parent)
             try:

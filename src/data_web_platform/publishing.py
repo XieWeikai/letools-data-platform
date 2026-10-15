@@ -2,15 +2,16 @@
 
 LeTools is invoked only inside a private, exclusively created staging parent.
 Linux renameat2(RENAME_NOREPLACE) makes the final existence check and directory
-publication one atomic operation. NFS uses an exclusively created directory
-symlink to the complete private dataset when the rename flag is unsupported.
-The backing directory then becomes permanent storage, not disposable staging.
+publication one atomic operation. Unsupported rename flags use an exclusively
+created real directory with an incomplete marker and meta/info.json last.
 """
 from __future__ import annotations
 
 import ctypes
 import errno
 import os
+import shutil
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -46,7 +47,7 @@ def publish_noreplace(staging: str | Path, destination: str | Path) -> None:
                 number = ctypes.get_errno()
                 if number not in (errno.EINVAL, errno.EOPNOTSUPP, errno.ENOSYS):
                     raise OSError(number, os.strerror(number), str(destination))
-                _publish_link(staging, destination, source_fd, target_fd)
+                _publish_directory(staging, destination, source_fd, target_fd)
             os.fsync(target_fd)
         finally:
             os.close(target_fd)
@@ -59,15 +60,14 @@ def publish_noreplace(staging: str | Path, destination: str | Path) -> None:
         pass
 
 
-def _publish_link(staging, destination, source_fd, target_fd):
-    """Atomic no-replace fallback for same-parent managed staging only.
+def _publish_directory(staging, destination, source_fd, target_fd):
+    """Reserve a real directory; never overwrite an existing output or file.
 
-    Unlike exists()+rename(), symlink creation cannot overwrite even an empty
-    directory created by another client. A relative link keeps the collection
-    portable as a whole. Never remove the backing parent after this succeeds.
+    NFS cannot promise atomic directory rename with NOREPLACE. Readers in this
+    platform reject the marker and external LeRobot readers lack info.json
+    until all files are in place. A failed attempt retains both staging and a
+    marked incomplete destination for diagnosis. It is not atomic rename.
     """
-    import stat
-
     if (staging.name != "dataset" or not staging.parent.name.startswith(f".{destination.name}.dwp-")
             or staging.parent.parent.resolve() != destination.parent.resolve()):
         raise RuntimeError("文件系统不支持防覆盖改名，且暂存目录不是目标同级的受管理目录；未发布")
@@ -77,9 +77,60 @@ def _publish_link(staging, destination, source_fd, target_fd):
     target_parent = os.fstat(target_fd)
     if source.st_dev != target_parent.st_dev:
         raise OSError(errno.EXDEV, "发布源与目标不在同一文件系统")
-    # All readers see either no name or the complete verified dataset. There
-    # is no writable reservation/partial directory at the final target name.
-    relative = f"{staging.parent.name}/{staging.name}"
-    os.symlink(relative, destination.name, dir_fd=target_fd)
-    print(f"NAS-compatible publication: {destination} -> {relative}. "
-          "Keep the hidden backing directory; it contains the published dataset.", flush=True)
+    # Validate the complete source tree before reserving the destination. No
+    # source links/special files are copied into the resulting real directory.
+    directories, files = [], []
+    for path in sorted(staging.rglob("*")):
+        mode = path.lstat().st_mode
+        relative = path.relative_to(staging)
+        if relative == Path(".dwp-incomplete"):
+            raise ValueError("拒绝发布未完成的源目录")
+        if stat.S_ISDIR(mode):
+            directories.append(relative)
+        elif stat.S_ISREG(mode):
+            files.append(relative)
+        else:
+            raise ValueError(f"发布源包含符号链接或特殊文件: {relative}")
+    os.mkdir(destination.name, mode=0o700, dir_fd=target_fd)
+    marker = destination / ".dwp-incomplete"
+    with marker.open("x") as handle:
+        handle.write(f"Publishing validated staging: {staging}\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    for relative in directories:
+        (destination / relative).mkdir(mode=0o700)
+    # Hard links are ordinary files, not symlinks. After staging is removed
+    # they remain complete files at the requested path, with no hidden backing.
+    for relative in sorted(files, key=lambda p: p == Path("meta/info.json")):
+        _link_or_copy(staging / relative, destination / relative)
+    # Flush child directory entries before making the output visible to the
+    # platform. No successful manifest is exposed while files are incomplete.
+    for directory in [*(destination / p for p in reversed(directories)), destination]:
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    marker.unlink()
+    print(f"Published real directory without symlinks: {destination}", flush=True)
+    # Publication has succeeded. Cleanup failure must not mislabel valid data
+    # as a failed job; retain redundant staging and report its exact path.
+    try:
+        shutil.rmtree(staging)
+    except OSError as error:
+        print(f"Published successfully; redundant staging retained at {staging}: {error}", flush=True)
+
+
+def _link_or_copy(source, destination):
+    try:
+        os.link(source, destination, follow_symlinks=False)
+    except OSError as error:
+        if error.errno not in (errno.EXDEV, errno.EOPNOTSUPP, errno.EPERM, errno.ENOSYS):
+            raise
+        # Exclusive creation also protects against a competing writer inside
+        # the reserved directory. Disk/I/O/permission failures remain fatal.
+        with source.open("rb") as reader, destination.open("xb") as writer:
+            shutil.copyfileobj(reader, writer, length=1024 * 1024)
+            writer.flush()
+            os.fsync(writer.fileno())
+        shutil.copystat(source, destination, follow_symlinks=False)
