@@ -6,6 +6,9 @@ browser never offers a switch which silently weakens fused conversion checks.
 """
 
 WORKBENCH = {
+    "raw-root": "原始查看器只读取已保存的单条 MCAP 录制或父目录。选择目录不会开始转换；首次打开建立专属预览缓存，原始文件不变。支持当前 Thor data/video 清单格式，正在录制时需先保存关闭。",
+    "raw-clock": "默认所有 topic 按 MCAP log_time 接收时钟对齐，零点是整条录制最早消息。Header 模式优先用消息 header.stamp，没有有效 Header 时用记录时间。两种模式均保留真实间隔、起止差异和时钟偏差，不把每个 topic 单独平移到零，也不补偿传输延迟。不会改变后续转换参数。",
+    "raw-at": "输入距当前时间基准起点的秒数，再点击跳转或按 Enter。视频、所有曲线细竖线及最近原始消息一起定位。消息查询取游标之前的真实消息并显示年龄，不插值、不补控制。上一帧/下一帧使用视频真实时间戳，不假设固定50FPS。",
     "provider": "选择处理原始格式的插件，列表来自本服务的专用 LeTools 环境。目前 Web 录制流程只支持 Tianji；更换 provider 需要重新加载轨迹，不会更改目标 LeRobot 版本。",
     "source-root": "服务器上的原始录制目录或录制父目录，不是浏览器所在电脑的路径。输入时匹配已有目录；选中后仍需加载录制。此路径决定待选轨迹，文件只读，不自动上传、删除或修复。",
     "recording-filter": "按录制名称筛选可见列表，不做质量检查，也不改变已经勾选的轨迹。全选筛选结果只选择匹配项；实际检查范围以已选数量为准。",

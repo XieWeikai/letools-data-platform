@@ -8,7 +8,10 @@
   <link rel="stylesheet" href="/static/styles.css?v=0.4.0">
   <link rel="stylesheet" href="/static/help.css?v=0.4.0">
   <script src="/static/help.js?v=0.4.0" defer></script>
-  <script src="/static/app.js?v=0.4.1" defer></script>
+  <script src="/static/app.js?v=0.5.0" defer></script>
+  <link rel="stylesheet" href="/static/raw.css?v=0.5.0">
+  <script src="/static/raw-timeline.js?v=0.5.0" defer></script>
+  <script src="/static/raw.js?v=0.5.0" defer></script>
 </head>
 <body data-page="dashboard">
   <a class="skip-link" href="#main">跳转到主要内容</a>
@@ -16,6 +19,7 @@
     <a class="brand" href="/" aria-label="Data Web Platform 首页"><span class="brand-mark" aria-hidden="true">D</span><span>Data Web <strong>Platform</strong><small>机器人数据工作台</small></span></a>
     <nav class="primary-nav" aria-label="主要导航">
       <button type="button" class="nav-button active" data-view="workbench" aria-current="page">转换工作台</button>
+      <button type="button" class="nav-button" data-view="raw">原始数据</button>
       <button type="button" class="nav-button" data-view="datasets">数据集<span id="dataset-count" class="nav-count">0</span></button>
       <button type="button" class="nav-button" data-view="environment">运行环境</button>
     </nav>
@@ -99,6 +103,46 @@
           </article>
         </div>
       </section>
+    </section>
+    <section id="view-raw" class="view" aria-labelledby="raw-title" hidden>
+      <div class="page-heading"><div><p class="eyebrow">原始录制 / RAW RECORDINGS</p><h1 id="raw-title">原始数据查看器</h1><p class="subtitle">在同一时间轴上查看 topic 与四路相机，保留真实采样和缺口。</p></div><span class="heading-note">原始文件只读</span></div>
+      <section class="panel raw-source" aria-label="选择原始录制">
+        <details id="raw-source-options" open><summary>选择 / 切换原始录制</summary>
+        <div class="field"><label for="raw-root">原始录制目录</label><div class="path-input"><input id="raw-root" type="text" autocomplete="off" spellcheck="false" placeholder="选择一条录制或其父目录"><button type="button" class="button secondary" data-browse="raw-root">选择目录</button><button type="button" class="button secondary" id="raw-load">加载录制</button></div></div>
+        <div class="raw-record-picker"><div class="field"><label for="raw-filter">筛选轨迹</label><input type="search" id="raw-filter" placeholder="输入名称的一部分"></div><div class="field"><label for="raw-recording">选择一条轨迹</label><select id="raw-recording" disabled><option>请先加载录制目录</option></select></div><button type="button" id="raw-open" class="button primary" disabled>打开原始数据</button></div>
+        </details><p id="raw-status" class="field-help" role="status" aria-live="polite">无需先通过转换检查；预览不会裁剪静止段、补控制命令或改变采样频率。</p>
+        <div id="raw-error" class="notice error" role="alert" hidden></div>
+      </section>
+      <div id="raw-empty" class="empty-state"><h2>从一条录制开始</h2><p>选择目录并打开轨迹后，在左侧勾选 topic 和数值字段。点击图表或拖动播放条，可同时定位信号与相机画面。</p></div>
+      <div id="raw-content" hidden>
+        <div class="raw-summary"><strong id="raw-name"></strong><span id="raw-counts"></span></div>
+        <div class="raw-layout">
+          <aside class="panel raw-topics" aria-label="Topic 选择">
+            <div class="raw-topic-heading"><h2>Topics</h2><span id="raw-topic-count" class="badge neutral"></span></div>
+            <label class="sr-only" for="raw-topic-filter">筛选 topic</label><input type="search" id="raw-topic-filter" placeholder="搜索 topic / 消息类型">
+            <div class="raw-topic-actions"><button type="button" id="raw-topics-common" class="text-button">常用信号</button><button type="button" id="raw-topics-clear" class="text-button">全不选</button></div>
+            <p class="field-help">最多同时查看 12 个 topic，每张图最多 16 个字段；文本 topic 显示原始消息。</p>
+            <div id="raw-topics"></div>
+          </aside>
+          <div class="raw-main">
+            <section class="panel raw-player" aria-label="同步播放">
+              <div class="raw-clock-row"><div class="field"><label for="raw-clock">时间基准</label><select id="raw-clock"><option value="record">MCAP 记录时间 · 统一接收时钟</option><option value="header">Header 时间 · 无 Header 时用记录时间</option></select></div><div><span class="mini-label">录制起点</span><p id="raw-origin" class="raw-mono"></p></div></div>
+              <p id="raw-clock-note" class="field-help"></p>
+              <div class="raw-transport"><button type="button" class="button primary" id="raw-play">播放</button><button type="button" class="button secondary" id="raw-prev" aria-label="上一视频帧">上一帧</button><button type="button" class="button secondary" id="raw-next" aria-label="下一视频帧">下一帧</button><label for="raw-speed">速度<select id="raw-speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label><output id="raw-time" class="raw-mono">0.000 / 0.000 s</output></div>
+              <label class="sr-only" for="raw-seek">播放位置（秒），使用方向键微调</label><input id="raw-seek" type="range" min="0" max="1" step="0.001" value="0">
+              <div class="raw-seek-row"><label for="raw-at">跳转到秒</label><input id="raw-at" type="number" min="0" step="0.001" value="0"><button id="raw-go" type="button" class="button secondary">跳转</button><span id="raw-video-time" class="field-help"></span></div>
+              <div id="raw-camera-grid" class="raw-camera-grid"></div>
+              <video id="raw-video" class="raw-video-source" muted playsinline preload="auto" aria-hidden="true"></video>
+              <div id="raw-video-error" class="notice warning" hidden></div>
+            </section>
+            <section class="panel raw-signals" aria-labelledby="raw-signals-title">
+              <div class="raw-chart-heading"><div><h2 id="raw-signals-title">信号时间轴</h2><p class="field-help">细竖线为当前播放时刻。曲线只连接真实样本，明显缺口处断开；点击任意图定位。</p></div><div class="raw-zoom"><button type="button" id="raw-zoom-in" class="button secondary" aria-label="围绕播放位置放大时间轴">放大</button><button type="button" id="raw-zoom-out" class="button secondary" aria-label="缩小时间轴">缩小</button><button type="button" id="raw-zoom-reset" class="button secondary">全程</button></div></div>
+              <p id="raw-range" class="field-help"></p><div id="raw-charts"></div>
+            </section>
+            <details class="panel raw-details"><summary>时间戳、数据边界与预览说明</summary><div id="raw-notes"></div><p>显示完整录制区间，不取所有信号的交集。数值保留原始单位和字段顺序；夹爪不归一化，四路命令不填 state。缩小时只选取真实极值样本绘图，点击时刻的消息另从完整索引读取。缺少 Header 的信号使用 MCAP 记录时间；两种时钟间不估算或补偿延迟。四宫格共用一个合成帧时间戳，不代表四个传感器曝光硬件同步。超长数组的消息预览最多显示前 256 项，超深结构会明确标注。</p></details>
+          </div>
+        </div>
+      </div>
     </section>
     <section id="view-datasets" class="view" aria-labelledby="datasets-title" hidden>
       <div class="page-heading"><div><p class="eyebrow">数据资产 / DATASETS</p><h1 id="datasets-title">本地数据集</h1><p class="subtitle">登记已转换的数据集，查看轨迹或进入 Doctor 进行诊断。</p></div><button type="button" id="refresh-datasets" class="button secondary">刷新列表</button></div>

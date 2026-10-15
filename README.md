@@ -2,7 +2,9 @@
 
 为服务器上的机器人数据提供目录选择、严格检查、LeRobot 转换、可视化、标注、诊断和编辑界面。平台负责操作入口与任务编排；数据解析和对齐由 provider 完成，目标格式由 LeTools 写入。
 
-**当前平台版本：0.4.1；文档核验日期：2026-10-12。** 配套 Tianji provider 0.6.3、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+**当前平台版本：0.5.0；文档核验日期：2026-10-15。** 配套 Tianji provider 0.6.3、LeTools/editor 和上游组件的精确提交见 [部署版本清单](deploy/sources.json)。Python 包与启动命令仍叫 `data-web-platform`，模块叫 `data_web_platform`，systemd 单元仍为 `data-web-platform.service`；GitHub 仓库名为 `letools-data-platform`。
+
+0.5.0 新增“原始数据”标签页（`/#raw`）：选择一条 MCAP 录制，自选 topic/字段、查看四路原始相机，并沿统一时间轴播放、逐帧、跳转和缩放。曲线细竖线跟随播放；原始 topic 不裁剪、不归一化、不补 action。默认 MCAP 记录时间，可切换 Header（缺失时用记录时间），完整保留各信号的开始/结束差异。详见 [原始查看器指南](docs/raw-viewer.md)。
 
 0.4.1 配合 provider 的四路 NVENC 探测及运行时回退：auto 遇到硬件 codec 故障时整批重试软件 H.264 一次，保留失败诊断且不混用配方。检查进度可重新开始，列表按索引替换，不重复计算录制。显式硬件请求、磁盘/源文件错误和软件重试失败仍停止；严格检查和原始数据不变。
 
@@ -10,6 +12,7 @@
 |---|---|
 | [部署与运维](docs/deployment.md) | 首次安装、固定源码、隔离环境、Viewer 构建、systemd、升级与恢复 |
 | [使用手册](docs/usage.md) | 目录/轨迹选择、参数、检查转换、Viewer/Annotation、Doctor、Editor |
+| [原始数据查看器](docs/raw-viewer.md) | 原始 topic/字段选择、四路画面、共享时间轴、时钟和缺口说明 |
 | [架构与代码导航](docs/architecture.md) | 三个项目的分工、数据前后端与 Web 前后端、模块和事件协议 |
 | [API 说明](docs/api.md) | 请求结构、生命周期、错误、只读操作与写入边界 |
 | [开发与测试](docs/development.md) | 代码注释约定、测试层次、增加 provider、仓库维护 |

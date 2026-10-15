@@ -1,6 +1,8 @@
 # 部署与运维
 
-适用于平台 0.4.1、Tianji provider 0.6.3，核验日期 2026-10-12。生产验收环境是 Ubuntu 24.04.3 / Linux aarch64、Python 3.12.3、Bun 1.4.2、系统 FFmpeg 6.1.1。部署使用一个专用 Python venv，不替换任何全局工具。Linux 原子防覆盖发布是生产依赖，macOS/Windows 不是本指南承诺的服务器部署平台。
+适用于平台 0.5.0、Tianji provider 0.6.3，核验日期 2026-10-15。生产验收环境是 Ubuntu 24.04.3 / Linux aarch64、Python 3.12.3、Bun 1.4.2、系统 FFmpeg 6.1.1。部署使用一个专用 Python venv，不替换任何全局工具。Linux 原子防覆盖发布是生产依赖，macOS/Windows 不是本指南承诺的服务器部署平台。
+
+0.5.0 原始查看器使用同一私有环境中的 MCAP、NumPy、PyAV 和 Tianji schema 编译器，无需新前端构建或 GPU。衍生缓存位于 `.state/raw-viewer`，单进程后台索引与转换队列独立，服务关闭时停止其自有索引进程；源文件变化会使缓存失效。部署前也应检查是否有人正在建立原始预览，避免中断其首次索引。无须重建 LeRobot Viewer 缓存；重启后刷新页面加载 0.5.0 静态脚本。
 
 ## 前置条件与目录
 

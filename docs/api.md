@@ -1,6 +1,6 @@
 # HTTP API与任务契约
 
-平台0.4.1；本服务关闭通用OpenAPI/交互schema页面，本文记录受限HTTP接口。字段的最终约束由`models.py`、`doctor.py`、`editor.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
+平台0.5.0；本服务关闭通用OpenAPI/交互schema页面，本文记录受限HTTP接口。字段的最终约束由`models.py`、`doctor.py`、`editor.py`、`raw_viewer.py`和`viewer.py`的Pydantic模型定义。未声明字段会被拒绝，不能用请求体选择任意Python模块或shell命令。
 
 ## 访问与错误
 
@@ -68,7 +68,21 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 
 0.4.0 API快照为issue及Doctor WARN/FAIL附加`explanation`（title、meaning、evidence、effect、next_step），并提供`validation_explanations`/`error_explanation`。原message、code、severity、valid不改；转换worker保存的原始provider报告保持原样。说明是已审阅规则匹配，未知模式明确保留不确定性，不是自动修复或在线模型生成。
 
-## Doctor
+## 原始数据查看
+
+原始数据另有只读内容 API（POST open 只建立衍生缓存）：
+
+| 方法 / 路径 | 参数与结果 |
+|---|---|
+| POST `/api/raw/open` | `{"path":"/absolute/saved/recording"}`；202 返回指纹 id、queued/running/ready，ready 含 manifest；队列满429 |
+| GET `/api/raw/{id}` | 状态、真实消息读取数量或完成清单；源已变化409；中断索引标记 interrupted，可重新 open |
+| GET `/api/raw/{id}/series` | topic=清单中的 topic-NNN、重复 fields、clock=record/header、start/end（相对秒）、limit=100–5000；返回真实选点、值和原始缺口 breaks |
+| GET `/api/raw/{id}/samples` | 重复 topics（最多32）、clock、at（相对秒）；完整索引中游标之前最近的原始消息、时间与年龄；不做插值 |
+| GET `/api/raw/{id}/video/{record或header}` | 按对应真实时钟封装的原始四宫格 MP4，支持 HTTP Range；不可用404 |
+
+清单公开两种时钟 origin_ns（十进制字符串防止 JS 精度损失）及 duration、topic 字段/计数/时序诊断、相机布局和视频时间。所有源路径使用同一根目录白名单并约束 MCAP 必须在录制内；每次数据/媒体访问复核源指纹。原始查看不产生转换任务、不改变 check 规则，详见[原始查看器](raw-viewer.md)。
+
+## Doctor 操作
 
 | 路径 | 行为 |
 |---|---|

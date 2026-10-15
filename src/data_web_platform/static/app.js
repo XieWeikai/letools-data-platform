@@ -889,9 +889,10 @@
     savePreferences();
     byId("folder-dialog").close();
     if (folder.target === "source-root") { invalidateRecordings(); loadRecordings(); }
+    if (folder.target === "raw-root") document.dispatchEvent(new CustomEvent("raw-directory-selected"));
   }
   function setView(name) {
-    if (!["workbench", "datasets", "environment"].includes(name)) return;
+    if (!["workbench", "raw", "datasets", "environment"].includes(name)) return;
     for (const view of document.querySelectorAll(".view")) view.hidden = view.id !== `view-${name}`;
     for (const button of document.querySelectorAll("[data-view]")) {
       const active = button.dataset.view === name;
@@ -899,6 +900,8 @@
       if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
     }
     if (name === "datasets") refreshDatasets();
+    document.dispatchEvent(new CustomEvent("platform-view-change", {detail: name}));
+    if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
   }
 
   restorePreferences();
@@ -906,7 +909,7 @@
   updateEncodingChoice();
   byId("video-encoder").addEventListener("change", updateEncodingChoice);
   for (const id of ["fps", "wrench-fps"]) byId(id).addEventListener("input", updateWrenchWindow);
-  for (const id of ["source-root", "destination", "dataset-path"]) setupPathSuggestions(id);
+  for (const id of ["source-root", "destination", "dataset-path", "raw-root"]) setupPathSuggestions(id);
   byId("datasets-select-all").addEventListener("click", () => { state.datasets.forEach(item => state.selectedDatasets.add(item.id)); renderDatasets(); });
   byId("datasets-select-none").addEventListener("click", () => { state.selectedDatasets.clear(); renderDatasets(); });
   byId("datasets-remove").addEventListener("click", () => removeDatasets());
@@ -952,4 +955,6 @@
   });
   window.addEventListener("beforeunload", () => clearTimeout(state.pollTimer));
   Promise.allSettled([refreshEnvironment(), refreshJobs(), refreshDatasets(), loadDoctorCapabilities()]);
+  window.addEventListener("hashchange", () => setView(location.hash.slice(1)));
+  if (location.hash) setView(location.hash.slice(1));
 })();

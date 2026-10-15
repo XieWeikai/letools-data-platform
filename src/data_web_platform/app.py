@@ -28,6 +28,7 @@ from .models import JobRequest, SelectionIds, NewDirectory
 from .paths import browse_directory, suggest_directories, create_directory, validate_path, validate_output_path
 from .viewer import ViewerService, create_viewer_router
 from .explanations import annotate_job
+from .raw_viewer import RawViewer, create_raw_router
 
 
 def discover_providers(config):
@@ -119,6 +120,7 @@ def create_app(config=None, *, start_services=True):
     registry = DatasetRegistry(config)
     jobs = JobManager(config, registry)
     viewer = ViewerService(config, registry)
+    raw_viewer = RawViewer(config)
     providers = []
     environment_error = None
 
@@ -133,6 +135,7 @@ def create_app(config=None, *, start_services=True):
             jobs.start()
             await viewer.start()
         yield
+        await run_in_threadpool(raw_viewer.close)
         if start_services:
             await run_in_threadpool(jobs.close)
             await viewer.stop()
@@ -141,6 +144,7 @@ def create_app(config=None, *, start_services=True):
                   openapi_url=None)
     app.state.config, app.state.registry, app.state.jobs, app.state.viewer = config, registry, jobs, viewer
     app.state.providers = lambda: providers
+    app.state.raw_viewer = raw_viewer
 
     @app.middleware("http")
     async def protect_requests(request: Request, call_next):
@@ -265,6 +269,7 @@ def create_app(config=None, *, start_services=True):
         return {"removed": registry.unregister(payload.ids), "files_deleted": False}
 
     app.include_router(create_doctor_router(config, registry, jobs))
+    app.include_router(create_raw_router(raw_viewer))
     app.include_router(create_editor_router(config, registry, jobs))
     app.include_router(create_viewer_router(config, registry, service=viewer))
     static = Path(__file__).parent / "static"

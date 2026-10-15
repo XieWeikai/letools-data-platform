@@ -1,3 +1,3 @@
 """A web interface around an explicitly configured, isolated LeTools runtime."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
