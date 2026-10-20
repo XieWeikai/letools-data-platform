@@ -19,12 +19,14 @@ class Config:
     letools_root: Path = field(default_factory=lambda: Path.home() / "projects/letools-tianji")
     state_dir: Path | None = None
     python: Path | None = None
-    allowed_roots: list[Path] = field(default_factory=lambda: [Path.home(), Path("/media/user/BAG_STORAGE")])
+    # None means OS permissions, not an application-wide directory jail.
+    # Explicit scopes remain available to embedded callers and fixture tests.
+    allowed_roots: list[Path] | None = None
     bun: Path = field(default_factory=lambda: Path.home() / ".bun/bin/bun")
     viewer_port: int = 3010
     host: str = "0.0.0.0"
     port: int = 8095
-    default_source: str = "/media/user/BAG_STORAGE/recorded_bags"
+    default_source: str = field(default_factory=lambda: str(Path.home()))
     internal_token: str = ""
 
     def __post_init__(self):
@@ -32,7 +34,8 @@ class Config:
         self.letools_root = Path(self.letools_root).resolve()
         self.state_dir = Path(self.state_dir or self.project_root / ".state").resolve()
         self.python = Path(self.python or self.letools_root / ".venv/bin/python")
-        self.allowed_roots = [Path(p).expanduser().resolve() for p in self.allowed_roots]
+        if self.allowed_roots is not None:
+            self.allowed_roots = [Path(p).expanduser().resolve() for p in self.allowed_roots]
 
     @classmethod
     def from_env(cls):
@@ -41,8 +44,8 @@ class Config:
             value = os.environ.get("DWP_" + name.upper())
             if value:
                 values[name] = Path(value).expanduser()
-        if os.environ.get("DWP_ALLOWED_ROOTS"):
-            values["allowed_roots"] = [Path(p) for p in os.environ["DWP_ALLOWED_ROOTS"].split(os.pathsep)]
+        # DWP_ALLOWED_ROOTS is retired. Never resolve/probe legacy mount paths:
+        # a missing removable disk must not break startup or /api/environment.
         obj = cls(**values)
         obj.host = os.environ.get("DWP_HOST", obj.host)
         obj.port = int(os.environ.get("DWP_PORT", obj.port))

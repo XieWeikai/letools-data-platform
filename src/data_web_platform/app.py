@@ -7,6 +7,7 @@ trusted-network deployment, while same-origin write and path checks remain.
 """
 from __future__ import annotations
 
+import getpass
 import json
 import subprocess
 from contextlib import asynccontextmanager
@@ -180,6 +181,13 @@ def create_app(config=None, *, start_services=True):
     async def missing(request, error):
         return JSONResponse({"detail": f"文件或目录不存在: {error.filename}"}, status_code=404)
 
+    @app.exception_handler(OSError)
+    async def filesystem_error(request, error):
+        reason = error.strerror or type(error).__name__
+        path = error.filename or request.query_params.get("path", "")
+        return JSONResponse({"detail": f"文件系统暂时不可用，请检查磁盘或网络挂载后重试（{reason}）: {path}"},
+                            status_code=503)
+
     @app.get("/health")
     def health():
         return {"status": "ok", "service": "data-web-platform"}
@@ -187,7 +195,9 @@ def create_app(config=None, *, start_services=True):
     @app.get("/api/environment")
     def environment():
         return {"letools_root": str(config.letools_root), "python": str(config.python),
-                "providers": providers, "roots": [str(p) for p in config.allowed_roots if p.is_dir()],
+                # Navigation shortcuts, not an allowlist. Do not stat mounts.
+                "providers": providers, "roots": [str(Path.home()), Path.home().anchor],
+                "path_access_mode": "os_permissions", "service_user": getpass.getuser(),
                 "default_source": config.default_source,
                 "default_output": str(Path.home() / "datasets"),
                 "error": environment_error, "viewer": viewer.status(),

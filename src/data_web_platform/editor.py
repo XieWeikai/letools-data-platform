@@ -184,7 +184,8 @@ def prepare_editor_request(payload, registry, config, jobs):
                 or edit_identity(previous.get('options', {})) != edit_identity(document)):
             raise ValueError('编辑参数或源数据与已完成计划不一致，请重新预览')
     return {'kind': 'editor', 'operation': request.operation, 'source': str(source),
-            'dataset': record['id'], 'allowed_roots': [str(p) for p in config.allowed_roots],
+            'dataset': record['id'],
+            'allowed_roots': None if config.allowed_roots is None else [str(p) for p in config.allowed_roots],
             'options': document, 'destination': str(output) if request.operation == 'apply' else None}
 
 

@@ -45,8 +45,11 @@ def _validated_request(request):
         raise ValueError("无效的 Doctor 请求")
     roots = request.get("allowed_roots")
     sources = request.get("sources")
-    if not isinstance(roots, list) or not roots or not all(isinstance(p, str) for p in roots):
-        raise ValueError("缺少受信任的目录白名单")
+    # Explicit null is the OS-permission policy prepared by the server. Keep
+    # old queued requests with explicit scopes readable; missing policy is bad.
+    if "allowed_roots" not in request or (roots is not None and (
+            not isinstance(roots, list) or not roots or not all(isinstance(p, str) for p in roots))):
+        raise ValueError("缺少或无效的文件系统访问策略")
     if not isinstance(sources, list) or not sources or len(sources) > 100:
         raise ValueError("缺少数据集路径")
     if not isinstance(request.get("options"), dict):

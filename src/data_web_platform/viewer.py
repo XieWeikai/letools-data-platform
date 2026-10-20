@@ -67,8 +67,8 @@ def _root(config, record: dict) -> Path:
 def _validated_path(config, path, *, must_exist=True) -> Path:
     try:
         return validate_path(path, config.allowed_roots, must_exist=must_exist)
-    except (ValueError, OSError):
-        raise HTTPException(403, "Path is not accessible within the platform's allowed roots") from None
+    except ValueError:
+        raise HTTPException(403, "无效或不可访问的服务器路径") from None
 
 
 def _inside(root: Path, relative: str, *, must_exist: bool = True) -> Path:

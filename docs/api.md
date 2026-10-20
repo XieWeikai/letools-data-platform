@@ -14,14 +14,14 @@ curl -fsS http://127.0.0.1:8095/api/environment
 curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 ```
 
-路径参数应正常URL编码；不要将用户路径直接拼成shell表达式。所有路径是服务器路径，并受允许根目录与输入/输出分离规则限制。
+路径参数应正常URL编码；不要将用户路径直接拼成shell表达式。所有路径是服务器路径，由服务账号的OS权限决定访问范围，无目录白名单；输入/输出分离和数据集内部引用约束仍保留。目录访问权限不足返回403，磁盘或网络挂载不可用返回503及具体说明。
 
 ## 工作台、注册与队列
 
 | 方法 / 路径 | 行为 |
 |---|---|
 | GET `/health` | 平台进程健康，不等于每个可选组件都就绪 |
-| GET `/api/environment` | Python/LeTools根路径、provider来源版本、白名单、Viewer状态和发现错误 |
+| GET `/api/environment` | Python/LeTools根路径、provider来源版本、`path_access_mode=os_permissions`、`service_user`、目录导航起点`roots`（不是白名单）、Viewer状态和发现错误；不探测磁盘挂载 |
 | GET `/api/browse?path=...` | 目录浏览；不是任意文件内容下载 |
 | GET `/api/directories/suggest?path=...` | 完整路径列子目录，末段前缀列匹配项；exact表示输入是否为已有目录 |
 | POST `/api/directories` | `{"parent":"/allowed/existing","name":"new-group"}`，仅创建一个新分类子目录，同名409，不允许写进原录制/数据集/缓存 |
@@ -80,7 +80,7 @@ curl -fsS 'http://127.0.0.1:8095/api/browse?path=/home/user/data_recorded'
 | GET `/api/raw/{id}/samples` | 重复 topics（最多32）、clock、at（相对秒）；完整索引中游标之前最近的原始消息、时间与年龄；不做插值。record_ns 是接收时间，header_or_record_ns 是 Header 模式实际采用的 Header 或回退时间，原 Header 在 sample 中 |
 | GET `/api/raw/{id}/video/{record或header}` | 按对应真实时钟封装的原始四宫格 MP4，支持 HTTP Range；不可用404 |
 
-清单公开两种时钟 origin_ns（十进制字符串防止 JS 精度损失）及 duration、topic 字段/计数/时序诊断、相机布局和视频时间。所有源路径使用同一根目录白名单并约束 MCAP 必须在录制内；每次数据/媒体访问复核源指纹。原始查看不产生转换任务、不改变 check 规则，详见[原始查看器](raw-viewer.md)。
+清单公开两种时钟 origin_ns（十进制字符串防止 JS 精度损失）及 duration、topic 字段/计数/时序诊断、相机布局和视频时间。原始录制可位于服务账号有权限访问的任意目录，MCAP 清单引用仍必须在对应录制内；每次数据/媒体访问复核源指纹。原始查看不产生转换任务、不改变 check 规则，详见[原始查看器](raw-viewer.md)。
 
 ## Doctor 操作
 

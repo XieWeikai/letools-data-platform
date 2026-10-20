@@ -168,7 +168,7 @@
     if (!byId("source-root").value && environment.default_source) byId("source-root").value = environment.default_source;
     if (!byId("destination").value && environment.default_output) byId("destination").value = makeDefaultDestination(environment.default_output);
     updateProviderHelp();
-    const fields = [["LeTools 源码", environment.letools_root], ["Python 解释器", environment.python], ["允许访问的根目录", (environment.roots ?? []).join("\n")], ["原始数据默认目录", environment.default_source], ["输出目录基准", environment.default_output], ["安全策略", "源数据只读；不删除、不拆分；只向新目录输出"]];
+    const fields = [["LeTools 源码", environment.letools_root], ["Python 解释器", environment.python], ["文件系统访问", `按服务账号 ${environment.service_user ?? ""} 的操作系统权限访问，无目录白名单`], ["目录导航起点", (environment.roots ?? []).join("\n")], ["原始数据默认目录", environment.default_source], ["输出目录基准", environment.default_output], ["安全策略", "源数据只读；不删除、不拆分；只向新目录输出"]];
     replace(byId("environment-details"), fields.flatMap(([label, value]) => [node("dt", "", label), node("dd", "path-text", value || "未配置")]));
     const cards = providers.map((provider) => {
       const card = node("div", "provider-card");
@@ -801,7 +801,7 @@
     show(byId("folder-create"), target === "destination");
     setFieldError("folder-name", "");
     put("folder-title", target === "destination" ? "选择输出父目录" : target === "dataset-path" ? "选择 LeRobot 数据集" : "选择原始录制目录");
-    put("folder-help", target === "destination" ? "选择可写父目录，并输入一个尚不存在的数据集目录名称。" : "浏览服务器允许访问的目录；此操作不会修改源文件。");
+    put("folder-help", target === "destination" ? "可浏览服务账号能访问的整个文件系统。选择可写父目录，并输入一个尚不存在的数据集目录名称。" : "可直接输入任意服务器绝对路径，访问权限由服务账号决定；此操作不会修改源文件。");
     put("folder-select", target === "destination" ? "使用此输出路径" : "使用此目录");
     replace(byId("folder-roots"), roots.map((path) => {
       const button = node("button", "text-button", path);

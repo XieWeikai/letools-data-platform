@@ -10,11 +10,15 @@ import os
 from pathlib import Path
 from typing import Iterable
 
-DEFAULT_ROOTS = (Path("/home/user"), Path("/media/user/BAG_STORAGE"))
+PathScope = Iterable[str | Path] | None
 
 
-def validate_path(path: str | Path, roots: Iterable[str | Path], must_exist: bool = True) -> Path:
-    """Return an absolute canonical path contained in a canonical allowed root."""
+def validate_path(path: str | Path, roots: PathScope = None, must_exist: bool = True) -> Path:
+    """Canonicalize a path, optionally confining internal dataset references.
+
+    Without an explicit scope the OS enforces service-account permissions.
+    Dataset media and MCAP manifests still supply their own containment scope.
+    """
     if not isinstance(path, (str, Path)) or not str(path).strip():
         raise ValueError("路径不能为空")
     if any(ord(char) < 32 for char in str(path)):
@@ -24,19 +28,20 @@ def validate_path(path: str | Path, roots: Iterable[str | Path], must_exist: boo
         raise ValueError("必须使用绝对路径")
     try:
         resolved = candidate.resolve(strict=must_exist)
-        allowed = [Path(root).expanduser().resolve() for root in roots]
-    except (OSError, RuntimeError) as error:
+    except (FileNotFoundError, RuntimeError) as error:
         raise ValueError(f"无法解析路径: {candidate}") from error
-    if not allowed or not any(resolved.is_relative_to(root) for root in allowed):
-        raise ValueError("路径不在允许访问的目录内（包括符号链接目标）")
+    if roots is not None:
+        allowed = [Path(root).expanduser().resolve() for root in roots]
+        if not allowed or not any(resolved.is_relative_to(root) for root in allowed):
+            raise ValueError("路径超出指定的数据范围（包括符号链接目标）")
     return resolved
 
 
 def validate_output_path(
-    path: str | Path, roots: Iterable[str | Path], inputs: Iterable[str | Path] = (),
+    path: str | Path, roots: PathScope = None, inputs: Iterable[str | Path] = (),
 ) -> Path:
     """Require a new output, disjoint from every input in both directions."""
-    roots = tuple(roots)
+    roots = tuple(roots) if roots is not None else None
     output = validate_path(path, roots, must_exist=False)
     if os.path.lexists(Path(path).expanduser()) or os.path.lexists(output):
         raise ValueError("输出路径已经存在；禁止覆盖，请选择全新的目录")
@@ -47,9 +52,9 @@ def validate_output_path(
     return output
 
 
-def browse_directory(path: str | Path, roots: Iterable[str | Path]) -> dict:
+def browse_directory(path: str | Path, roots: PathScope = None) -> dict:
     """List direct visible directories only, without traversing any recording."""
-    roots = tuple(roots)
+    roots = tuple(roots) if roots is not None else None
     current = validate_path(path, roots)
     if not current.is_dir():
         raise ValueError("只能浏览目录，不能浏览文件")
@@ -71,7 +76,7 @@ def browse_directory(path: str | Path, roots: Iterable[str | Path]) -> dict:
             continue
     try:
         parent = str(validate_path(current.parent, roots)) if current.parent != current else None
-    except ValueError:
+    except (OSError, ValueError):
         parent = None
     return {"path": str(current), "parent": parent, "dirs": directories,
             "directories": directories}
@@ -82,18 +87,18 @@ list_directory = browse_directory
 validate_output = validate_output_path
 
 
-def suggest_directories(path: str, roots) -> dict:
-    """Complete one path segment without exposing directories outside roots.
+def suggest_directories(path: str, roots: PathScope = None) -> dict:
+    """Complete one filesystem path segment using service-account permissions.
 
     Existing paths list children; a partial final component filters siblings.
     Return whether the typed path exists so the UI never selects its parent by
     mistake. No recursive walk or filesystem mutation occurs while typing.
     """
-    roots = tuple(roots)
+    roots = tuple(roots) if roots is not None else None
     raw = str(path).strip()
     # While an allowed root itself is only partly typed, offer that root alone
     # rather than listing its otherwise forbidden parent (e.g. /home/us...).
-    root_matches = [Path(root).resolve() for root in roots if str(Path(root).resolve()).startswith(raw)]
+    root_matches = [Path(root).resolve() for root in (roots or ()) if str(Path(root).resolve()).startswith(raw)]
     if raw.startswith("/") and raw != "/" and root_matches and not any(str(p) == raw.rstrip("/") for p in root_matches):
         dirs = [{"name": p.name, "path": str(p), "is_dataset": False, "is_recording": False}
                 for p in root_matches if p.is_dir()]
@@ -109,7 +114,7 @@ def suggest_directories(path: str, roots) -> dict:
     return {**result, "dirs": dirs, "directories": dirs, "query": raw, "exact": False, "prefix": prefix}
 
 
-def create_directory(parent: str, name: str, roots) -> Path:
+def create_directory(parent: str, name: str, roots: PathScope = None) -> Path:
     """Create one visible child directory, exclusively, outside recorded data.
 
     This creates an output *parent*. Final dataset names remain uncreated until

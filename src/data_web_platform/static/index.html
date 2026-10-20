@@ -161,8 +161,8 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="folder-dialog" class="folder-dialog" aria-labelledby="folder-title" aria-describedby="folder-help">
     <form method="dialog" class="dialog-header"><div><p class="section-index">SERVER FILESYSTEM</p><h2 id="folder-title">选择服务器目录</h2></div><button class="icon-button" aria-label="关闭目录选择器" value="cancel">×</button></form>
-    <p id="folder-help" class="field-help">仅浏览服务器允许访问的目录。</p>
-    <div id="folder-roots" class="folder-roots" aria-label="允许访问的根目录"></div>
+    <p id="folder-help" class="field-help">直接浏览服务账号有权限访问的文件系统，无目录白名单。</p>
+    <div id="folder-roots" class="folder-roots" aria-label="目录导航快捷入口，不限制访问范围"></div>
     <form id="folder-path-form" class="path-input"><label class="sr-only" for="folder-path">当前目录</label><input id="folder-path" type="text" spellcheck="false" autocomplete="off"><button type="submit" class="button secondary">前往</button></form>
     <div class="folder-toolbar"><button type="button" id="folder-parent" class="text-button">上一级</button><span id="folder-count" class="field-help"></span></div>
     <div id="folder-create" class="field" hidden><label for="folder-create-name">新建分类子目录</label><div class="path-input"><input id="folder-create-name" autocomplete="off" placeholder="例如：training_batches"><button type="button" id="folder-create-button" class="button secondary">新建并进入</button></div><p class="field-help">创建的是分类父目录；最终数据集名称在下方填写，由转换成功后创建。</p></div>

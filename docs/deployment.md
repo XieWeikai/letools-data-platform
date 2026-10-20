@@ -6,7 +6,9 @@
 
 0.5.2 的 NFS 发布兼容：NFS4 可能允许读写却不支持 renameat2 的 RENAME_NOREPLACE，原版会在验证结束后报 EINVAL。现在排他创建真实目标目录，保留 `.dwp-incomplete` 到文件全部就绪；普通文件优先硬链接、否则排他复制，meta/info.json最后写入，不使用符号链接。成功后删除本次暂存，最终目录可独立复制和使用；失败保留完整源和带标记的部分目标供排查。此分支不是原子目录改名；平台拒绝未完成标记，外部程序应在任务成功后再读。旧0.5.1符号链接仍需显式迁移。平台内核仍需要Linux，该变更不修改NFS挂载、NAS权限或用户映射。
 
-Marvin NAS 访问采用该服务的 systemd drop-in：`~/.config/systemd/user/data-web-platform.service.d/30-nas-tianji.conf`，设置 `DWP_ALLOWED_ROOTS=/home/user:/media/user/BAG_STORAGE:/nas/tianji`。该主机配置保留旧白名单并仅增加指定 NAS 子树，不将整个 `/nas` 开放。
+所有目录入口统一使用运行服务账号（Marvin 为 `user`）的操作系统文件权限，不再配置目录白名单。可直接浏览 `/`、home、NAS 或其他已挂载磁盘；读/遍历/写权限仍由 Unix 权限、ACL 和挂载状态决定，不会提权。历史 `30-nas-tianji.conf` 中的 `DWP_ALLOWED_ROOTS` 已废弃并被忽略，可备份后移除；无需为新路径增加 drop-in。
+
+`GET /api/environment` 只返回导航起点，不探测可移动磁盘/NAS。失效挂载不会拖垮环境接口；主动访问失效挂载返回文件系统错误（503），权限不足返回403。此版本未添加登录，网络可达者可以使用服务账号能访问的数据，请只开放给可信内网/Tailscale。
 
 ## 前置条件与目录
 
@@ -134,8 +136,8 @@ curl -fsS http://127.0.0.1:8095/api/editor/options
 | `DWP_BUN` | `~/.bun/bin/bun`；Viewer build/serve 的 Bun |
 | `DWP_HOST` / `DWP_PORT` | `0.0.0.0` / `8095`；外层服务监听 |
 | `DWP_VIEWER_PORT` | `3010`；内部 loopback Viewer 端口 |
-| `DWP_ALLOWED_ROOTS` | 默认用户 home 与 `/media/user/BAG_STORAGE`；冒号分隔的服务器目录白名单 |
-| `DWP_DEFAULT_SOURCE` | `/media/user/BAG_STORAGE/recorded_bags`；页面默认路径，不会自动转换 |
+| `DWP_ALLOWED_ROOTS` | 已废弃，设置后也不会限制目录或触发挂载探测 |
+| `DWP_DEFAULT_SOURCE` | 服务账号 home；可选页面默认路径，不会自动转换，也不限制访问范围 |
 
 平台的一些读取/Editor 接口会在 Web 进程内导入 LeTools/editor，因此推荐四个项目装在同一 venv；不要仅更改 DWP_PYTHON 就假定 API 进程可以缺少这些依赖。`DWP_INTERNAL_TOKEN`、`DWP_DATA_ORIGIN` 由平台管理，不是用户登录配置。
 

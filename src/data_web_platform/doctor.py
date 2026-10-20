@@ -89,7 +89,8 @@ def prepare_doctor_request(payload: dict | DoctorRequest, registry, config) -> d
             "sources": sources, "output": output,
             "destination": None if request.operation == "trim" and request.dry_run else output,
             "confirm": request.confirm,
-            "allowed_roots": [str(root) for root in config.allowed_roots], "options": options}
+            "allowed_roots": None if config.allowed_roots is None else [str(root) for root in config.allowed_roots],
+            "options": options}
 
 
 def build_doctor_command(payload: dict | DoctorRequest, registry, config) -> list[str]:

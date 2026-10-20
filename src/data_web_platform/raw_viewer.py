@@ -57,7 +57,8 @@ class RawViewer:
                     diagnostic = Path(tempfile.mkdtemp(prefix=token[:12] + ".incomplete-", dir=self.root))
                     directory.rename(diagnostic / "cache")
                 directory.mkdir(parents=True, mode=0o700)
-                request = {"snapshot": snapshot, "roots": list(map(str, self.config.allowed_roots))}
+                request = {"snapshot": snapshot, "roots": None if self.config.allowed_roots is None
+                           else list(map(str, self.config.allowed_roots))}
                 (directory / "request.json").write_text(json.dumps(request))
                 self._status(directory, {"state": "queued", "message": "等待建立原始预览索引"})
                 self.pending.add(token)
