@@ -23,7 +23,8 @@ CPUWeight=20
 IOWeight=20
 UMask=0077
 NoNewPrivileges=true
-PrivateTmp=true
+# Directory pickers must see the same /tmp and /var/tmp as the service user.
+PrivateTmp=false
 
 [Install]
 WantedBy=default.target

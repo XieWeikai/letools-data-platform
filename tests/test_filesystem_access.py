@@ -177,3 +177,10 @@ def test_raw_mcap_manifest_cannot_escape_recording_in_os_mode(filesystem):
     (raw / "data/record.mcap").symlink_to(mount / "external.mcap")
     with pytest.raises(ValueError, match="MCAP 清单路径"):
         source_snapshot(raw, None)
+
+
+def test_user_service_shares_normal_temporary_filesystem():
+    unit = (Path(__file__).resolve().parents[1] / "deploy/data-web-platform.service").read_text()
+    assert "PrivateTmp=false" in unit
+    assert "NoNewPrivileges=true" in unit
+    assert "DWP_ALLOWED_ROOTS=" not in unit
